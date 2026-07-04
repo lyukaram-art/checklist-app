@@ -35,6 +35,8 @@ const els = {
   dayDetail: document.getElementById('dayDetail'),
   dayDetailTitle: document.getElementById('dayDetailTitle'),
   dayDetailList: document.getElementById('dayDetailList'),
+  expBarFill: document.getElementById('expBarFill'),
+  expBarLabel: document.getElementById('expBarLabel'),
 };
 
 let tasks = loadLocalTasks();
@@ -191,7 +193,8 @@ function render() {
   const todayKey = getDayKey(new Date());
   const todayWeekday = new Date().getDay();
 
-  renderList(els.dailyList, visible.filter(t => t.type === 'daily'));
+  const dailyTasks = visible.filter(t => t.type === 'daily');
+  renderList(els.dailyList, dailyTasks);
 
   const weeklyTasks = visible
     .filter(t => t.type === 'weekly' && (t.weekday === undefined || t.weekday === todayWeekday))
@@ -205,6 +208,16 @@ function render() {
     ))
     .sort((a, b) => a.date.localeCompare(b.date));
   renderList(els.dateList, dateTasks, { showDate: true });
+
+  renderExpBar([...dailyTasks, ...weeklyTasks, ...dateTasks]);
+}
+
+function renderExpBar(todayItems) {
+  const total = todayItems.length;
+  const done = todayItems.filter(t => t.checked).length;
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  els.expBarFill.style.width = `${pct}%`;
+  els.expBarLabel.textContent = `오늘 경험치 ${pct}%`;
 }
 
 function formatDateShort(dateKey) {

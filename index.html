@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>체크리스트</title>
-<meta name="theme-color" content="#4f46e5">
+<meta name="theme-color" content="#E4572E">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
@@ -13,7 +13,7 @@
 <body>
   <div class="app">
     <header class="header">
-      <h1>✅ 체크리스트</h1>
+      <h1>🍁 체크리스트</h1>
       <div class="header-actions">
         <button id="notifyBtn" class="icon-btn" title="알림 켜기">🔔</button>
         <button id="syncBtn" class="icon-btn" title="다른 기기와 연동">🔗</button>
@@ -71,6 +71,13 @@
         <button class="cat-btn" data-category="game">게임</button>
         <button class="cat-btn" data-category="study">학업</button>
       </nav>
+
+      <div class="exp-bar-wrap">
+        <div class="exp-bar-track">
+          <div id="expBarFill" class="exp-bar-fill" style="width: 0%"></div>
+        </div>
+        <p id="expBarLabel" class="exp-bar-label">오늘 경험치 0%</p>
+      </div>
 
       <section class="list-section">
         <h2>매일 할 일</h2>

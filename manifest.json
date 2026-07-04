@@ -3,8 +3,8 @@
   "short_name": "체크리스트",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#f4f5f9",
-  "theme_color": "#4f46e5",
+  "background_color": "#FFF8E7",
+  "theme_color": "#E4572E",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
   ]
