@@ -2,7 +2,7 @@ name: Daily Reminder
 
 on:
   schedule:
-    - cron: '0 12 * * *' # 매일 21:00 KST (UTC+9)
+    - cron: '0 14 * * *' # 매일 23:00 KST (UTC+9)
   workflow_dispatch: {}
 
 jobs:
