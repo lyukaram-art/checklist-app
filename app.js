@@ -193,6 +193,7 @@ function visibleTasks() {
 }
 
 function render() {
+  recordHistorySnapshot();
   const visible = visibleTasks();
   const todayKey = getDayKey(new Date());
   const todayWeekday = new Date().getDay();
