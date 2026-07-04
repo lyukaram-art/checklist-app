@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>체크리스트</title>
+<meta name="theme-color" content="#4f46e5">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>✅ 체크리스트</h1>
+      <div class="header-actions">
+        <button id="notifyBtn" class="icon-btn" title="알림 켜기">🔔</button>
+        <button id="syncBtn" class="icon-btn" title="다른 기기와 연동">🔗</button>
+      </div>
+    </header>
+
+    <section id="syncPanel" class="sync-panel hidden">
+      <div class="sync-row">
+        <span>내 코드</span>
+        <code id="roomCodeDisplay">------</code>
+        <button id="copyCodeBtn" class="small-btn">복사</button>
+      </div>
+      <div class="sync-row">
+        <input id="joinCodeInput" type="text" placeholder="다른 기기 코드 입력" maxlength="6" autocapitalize="characters">
+        <button id="joinBtn" class="small-btn">연결</button>
+      </div>
+      <p id="syncStatus" class="sync-status"></p>
+    </section>
+
+    <p id="notifyStatus" class="sync-status hidden"></p>
+
+    <nav class="tab-nav">
+      <button id="todayTabBtn" class="tab-btn active">오늘</button>
+      <button id="calendarTabBtn" class="tab-btn">달력</button>
+    </nav>
+
+    <div id="todayView">
+      <form id="addForm" class="add-form">
+        <input id="taskInput" type="text" placeholder="할 일을 입력하세요" required>
+        <select id="taskCategoryInput">
+          <option value="game">게임</option>
+          <option value="study">학업</option>
+        </select>
+        <select id="taskType">
+          <option value="daily">매일</option>
+          <option value="weekly">매주</option>
+          <option value="date">날짜 지정</option>
+        </select>
+        <input id="taskDateInput" type="date" class="hidden">
+        <select id="taskWeekdayInput" class="hidden">
+          <option value="">요일 상관없음</option>
+          <option value="0">일요일</option>
+          <option value="1">월요일</option>
+          <option value="2">화요일</option>
+          <option value="3">수요일</option>
+          <option value="4">목요일</option>
+          <option value="5">금요일</option>
+          <option value="6">토요일</option>
+        </select>
+        <button type="submit" class="add-btn">추가</button>
+      </form>
+
+      <nav class="category-filter">
+        <button class="cat-btn active" data-category="all">전체</button>
+        <button class="cat-btn" data-category="game">게임</button>
+        <button class="cat-btn" data-category="study">학업</button>
+      </nav>
+
+      <section class="list-section">
+        <h2>매일 할 일</h2>
+        <ul id="dailyList" class="task-list"></ul>
+      </section>
+
+      <section class="list-section">
+        <h2>매주 할 일</h2>
+        <ul id="weeklyList" class="task-list"></ul>
+      </section>
+
+      <section class="list-section">
+        <h2>날짜 지정 (오늘)</h2>
+        <ul id="dateList" class="task-list"></ul>
+      </section>
+    </div>
+
+    <div id="calendarView" class="hidden">
+      <div class="calendar-header">
+        <button id="prevMonthBtn" class="icon-btn small">◀</button>
+        <h2 id="calendarMonthLabel">2026년 7월</h2>
+        <button id="nextMonthBtn" class="icon-btn small">▶</button>
+      </div>
+      <div class="calendar-weekdays">
+        <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+      </div>
+      <div id="calendarGrid" class="calendar-grid"></div>
+      <div class="calendar-legend">
+        <span><i class="dot full"></i>모두 완료</span>
+        <span><i class="dot partial"></i>일부 완료</span>
+        <span><i class="dot none"></i>미완료</span>
+      </div>
+      <div id="dayDetail" class="day-detail hidden">
+        <h3 id="dayDetailTitle"></h3>
+        <ul id="dayDetailList" class="task-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
