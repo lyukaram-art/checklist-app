@@ -457,6 +457,11 @@ async function initFirebase() {
     firebaseReady = true;
     await connectRoom(roomCode);
     setStatus('연동 완료! 이 코드로 다른 기기에서도 접속할 수 있어요.');
+
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      els.notifyBtn.classList.add('on');
+      ensureForegroundMessaging().catch((err) => console.error(err));
+    }
   } catch (err) {
     console.error(err);
     setStatus('연동 실패: ' + err.message);
@@ -466,6 +471,20 @@ async function initFirebase() {
 function setNotifyStatus(msg) {
   els.notifyStatus.textContent = msg;
   els.notifyStatus.classList.remove('hidden');
+}
+
+let foregroundMessagingReady = false;
+
+async function ensureForegroundMessaging() {
+  if (foregroundMessagingReady || !firebaseApp) return;
+  const messagingMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js');
+  const messaging = messagingMod.getMessaging(firebaseApp);
+  messagingMod.onMessage(messaging, (payload) => {
+    const title = payload.notification?.title || '체크리스트';
+    const body = payload.notification?.body || '';
+    navigator.serviceWorker.ready.then((reg) => reg.showNotification(title, { body, icon: 'icon.svg' }));
+  });
+  foregroundMessagingReady = true;
 }
 
 els.notifyBtn.addEventListener('click', async () => {
@@ -488,6 +507,7 @@ els.notifyBtn.addEventListener('click', async () => {
     const swReg = await navigator.serviceWorker.ready;
     const token = await messagingMod.getToken(messaging, { vapidKey, serviceWorkerRegistration: swReg });
     await fsMod.setDoc(docRef, { pushTokens: fsMod.arrayUnion(token) }, { merge: true });
+    await ensureForegroundMessaging();
     els.notifyBtn.classList.add('on');
     setNotifyStatus('알림이 켜졌어요. 매일 정해진 시간에 남은 할 일을 알려드려요.');
   } catch (err) {
