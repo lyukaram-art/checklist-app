@@ -16,6 +16,32 @@ body {
   min-height: 100vh;
 }
 
+.side-deco {
+  display: none;
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.side-deco-left {
+  left: clamp(12px, 6vw, 80px);
+}
+
+.side-deco-right {
+  right: clamp(12px, 6vw, 80px);
+}
+
+@media (min-width: 900px) {
+  .side-deco {
+    display: flex;
+  }
+}
+
 .header {
   display: flex;
   align-items: center;
