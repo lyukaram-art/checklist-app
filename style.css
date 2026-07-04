@@ -49,6 +49,66 @@ body {
   margin-bottom: 12px;
 }
 
+.level-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.level-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 2px solid #F1E2C3;
+}
+
+.level-card-game {
+  border-color: #F5C6B8;
+}
+
+.level-card-study {
+  border-color: #BFDCEF;
+}
+
+.level-icon {
+  font-size: 20px;
+}
+
+.level-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.level-label {
+  font-size: 11px;
+  color: #A9754A;
+}
+
+.level-value {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.level-card-game .level-value {
+  color: #C4432B;
+}
+
+.level-card-study .level-value {
+  color: #2E6DA4;
+}
+
+.level-days {
+  font-size: 11px;
+  color: #C9AD87;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .header h1 {
   font-size: 22px;
   margin: 0;

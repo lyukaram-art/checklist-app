@@ -37,6 +37,10 @@ const els = {
   dayDetailList: document.getElementById('dayDetailList'),
   expBarFill: document.getElementById('expBarFill'),
   expBarLabel: document.getElementById('expBarLabel'),
+  gameLevelValue: document.getElementById('gameLevelValue'),
+  gameLevelDays: document.getElementById('gameLevelDays'),
+  studyLevelValue: document.getElementById('studyLevelValue'),
+  studyLevelDays: document.getElementById('studyLevelDays'),
 };
 
 let tasks = loadLocalTasks();
@@ -210,6 +214,32 @@ function render() {
   renderList(els.dateList, dateTasks, { showDate: true });
 
   renderExpBar([...dailyTasks, ...weeklyTasks, ...dateTasks]);
+  renderLevels();
+}
+
+function computeCategoryLevels() {
+  const clearDays = { game: 0, study: 0 };
+  for (const dateKey of Object.keys(history)) {
+    const items = getDayItems(dateKey);
+    for (const cat of ['game', 'study']) {
+      const catItems = items.filter(t => t.category === cat);
+      if (catItems.length > 0 && catItems.every(t => t.checked)) {
+        clearDays[cat] += 1;
+      }
+    }
+  }
+  return {
+    game: { days: clearDays.game, level: clearDays.game + 1 },
+    study: { days: clearDays.study, level: clearDays.study + 1 },
+  };
+}
+
+function renderLevels() {
+  const levels = computeCategoryLevels();
+  els.gameLevelValue.textContent = `Lv.${levels.game.level}`;
+  els.gameLevelDays.textContent = `완료한 날 ${levels.game.days}일`;
+  els.studyLevelValue.textContent = `Lv.${levels.study.level}`;
+  els.studyLevelDays.textContent = `완료한 날 ${levels.study.days}일`;
 }
 
 function renderExpBar(todayItems) {
