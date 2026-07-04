@@ -3,6 +3,8 @@ import { firebaseConfig, vapidKey } from './firebase-config.js';
 const LOCAL_TASKS_KEY = 'checklist_tasks';
 const LOCAL_HISTORY_KEY = 'checklist_history';
 const LOCAL_ROOM_KEY = 'checklist_room_code';
+const LOCAL_NOTE_UNITS_KEY = 'checklist_note_units';
+const LOCAL_NOTES_KEY = 'checklist_notes';
 
 const els = {
   syncBtn: document.getElementById('syncBtn'),
@@ -43,13 +45,28 @@ const els = {
   gameLevelDays: document.getElementById('gameLevelDays'),
   studyLevelValue: document.getElementById('studyLevelValue'),
   studyLevelDays: document.getElementById('studyLevelDays'),
+  notesTabBtn: document.getElementById('notesTabBtn'),
+  notesView: document.getElementById('notesView'),
+  addUnitForm: document.getElementById('addUnitForm'),
+  unitInput: document.getElementById('unitInput'),
+  unitFilter: document.getElementById('unitFilter'),
+  noteSearchInput: document.getElementById('noteSearchInput'),
+  addNoteForm: document.getElementById('addNoteForm'),
+  noteTitleInput: document.getElementById('noteTitleInput'),
+  noteContentInput: document.getElementById('noteContentInput'),
+  noteAddHint: document.getElementById('noteAddHint'),
+  notesList: document.getElementById('notesList'),
 };
 
 let tasks = loadLocalTasks();
 let history = loadLocalHistory();
+let noteUnits = loadLocalNoteUnits();
+let notes = loadLocalNotes();
 let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let selectedDayKey = null;
 let categoryFilter = 'all';
+let selectedUnitId = 'all';
+let noteSearchQuery = '';
 let roomCode = localStorage.getItem(LOCAL_ROOM_KEY) || generateRoomCode();
 localStorage.setItem(LOCAL_ROOM_KEY, roomCode);
 els.roomCodeDisplay.textContent = roomCode;
@@ -129,6 +146,24 @@ function loadLocalHistory() {
   }
 }
 
+function loadLocalNoteUnits() {
+  try {
+    const raw = localStorage.getItem(LOCAL_NOTE_UNITS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadLocalNotes() {
+  try {
+    const raw = localStorage.getItem(LOCAL_NOTES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
 function weekdayOf(dateKey) {
   const [y, m, d] = dateKey.split('-').map(Number);
   return new Date(y, m - 1, d).getDay();
@@ -173,12 +208,14 @@ function getDayItems(dateKey) {
 function saveLocal() {
   localStorage.setItem(LOCAL_TASKS_KEY, JSON.stringify(tasks));
   localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(history));
+  localStorage.setItem(LOCAL_NOTE_UNITS_KEY, JSON.stringify(noteUnits));
+  localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify(notes));
 }
 
 async function saveRemote() {
   if (!firebaseReady || !docRef) return;
   suppressNextWrite = true;
-  await fsMod.setDoc(docRef, { items: tasks, history, updatedAt: Date.now() });
+  await fsMod.setDoc(docRef, { items: tasks, history, noteUnits, notes, updatedAt: Date.now() }, { merge: true });
 }
 
 function persist() {
@@ -186,6 +223,7 @@ function persist() {
   saveLocal();
   saveRemote();
   if (!els.calendarView.classList.contains('hidden')) renderCalendar();
+  if (!els.notesView.classList.contains('hidden')) renderNotes();
 }
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -398,6 +436,192 @@ els.addForm.addEventListener('submit', (e) => {
   els.taskInput.focus();
 });
 
+function addUnit(name) {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  noteUnits.push({ id: crypto.randomUUID(), name: trimmed });
+  persist();
+}
+
+function deleteUnit(id) {
+  if (!confirm('이 단원과 안의 노트를 모두 삭제할까요?')) return;
+  noteUnits = noteUnits.filter(u => u.id !== id);
+  notes = notes.filter(n => n.unitId !== id);
+  if (selectedUnitId === id) selectedUnitId = 'all';
+  persist();
+}
+
+function addNote(unitId, title, content) {
+  notes.push({
+    id: crypto.randomUUID(),
+    unitId,
+    title: title.trim(),
+    content: content.trim(),
+    createdAt: Date.now(),
+    reviewed: false,
+  });
+  persist();
+}
+
+function deleteNote(id) {
+  notes = notes.filter(n => n.id !== id);
+  persist();
+}
+
+function toggleNoteReviewed(id) {
+  const n = notes.find(x => x.id === id);
+  if (!n) return;
+  n.reviewed = !n.reviewed;
+  persist();
+}
+
+function unitName(unitId) {
+  return noteUnits.find(u => u.id === unitId)?.name || '(삭제된 단원)';
+}
+
+function noteMatchesSearch(n) {
+  if (!noteSearchQuery) return true;
+  const q = noteSearchQuery.toLowerCase();
+  return n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q);
+}
+
+function visibleNotes() {
+  return notes
+    .filter(n => selectedUnitId === 'all' || n.unitId === selectedUnitId)
+    .filter(noteMatchesSearch)
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+function renderUnitFilter() {
+  els.unitFilter.querySelectorAll('[data-dynamic-unit]').forEach(b => b.remove());
+  for (const u of noteUnits) {
+    const btn = document.createElement('button');
+    btn.className = 'cat-btn unit-chip' + (selectedUnitId === u.id ? ' active' : '');
+    btn.dataset.dynamicUnit = 'true';
+    btn.dataset.unitId = u.id;
+
+    const label = document.createElement('span');
+    label.textContent = u.name;
+    btn.appendChild(label);
+
+    const del = document.createElement('span');
+    del.className = 'unit-chip-delete';
+    del.textContent = '✕';
+    btn.appendChild(del);
+
+    els.unitFilter.appendChild(btn);
+  }
+  els.unitFilter.querySelector('[data-unit-id="all"]').classList.toggle('active', selectedUnitId === 'all');
+}
+
+function renderNotes() {
+  renderUnitFilter();
+
+  const hasUnits = noteUnits.length > 0;
+  const canAdd = hasUnits && selectedUnitId !== 'all';
+  els.addNoteForm.classList.toggle('hidden', !canAdd);
+  els.noteAddHint.classList.toggle('hidden', canAdd);
+  if (!canAdd) {
+    els.noteAddHint.textContent = hasUnits
+      ? '단원을 선택하면 노트를 추가할 수 있어요.'
+      : '먼저 위에서 단원(폴더)을 추가해 주세요.';
+  }
+
+  const list = visibleNotes();
+  els.notesList.innerHTML = '';
+  if (list.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'empty-hint';
+    li.textContent = '아직 노트가 없어요.';
+    els.notesList.appendChild(li);
+    return;
+  }
+
+  for (const n of list) {
+    const li = document.createElement('li');
+    li.className = 'note-item' + (n.reviewed ? ' reviewed' : '');
+
+    const header = document.createElement('div');
+    header.className = 'note-header';
+
+    const check = document.createElement('button');
+    check.className = 'task-check' + (n.reviewed ? ' checked' : '');
+    check.title = '복습 완료 표시';
+    check.textContent = n.reviewed ? '✓' : '';
+    check.addEventListener('click', () => toggleNoteReviewed(n.id));
+    header.appendChild(check);
+
+    const titleWrap = document.createElement('div');
+    titleWrap.className = 'note-title-wrap';
+    const title = document.createElement('span');
+    title.className = 'note-title';
+    title.textContent = n.title;
+    titleWrap.appendChild(title);
+    if (selectedUnitId === 'all') {
+      const badge = document.createElement('span');
+      badge.className = 'date-badge';
+      badge.textContent = unitName(n.unitId);
+      titleWrap.appendChild(badge);
+    }
+    header.appendChild(titleWrap);
+
+    const del = document.createElement('button');
+    del.className = 'delete-btn';
+    del.textContent = '✕';
+    del.addEventListener('click', () => deleteNote(n.id));
+    header.appendChild(del);
+
+    li.appendChild(header);
+
+    const body = document.createElement('p');
+    body.className = 'note-content hidden';
+    body.textContent = n.content;
+    li.appendChild(body);
+
+    titleWrap.addEventListener('click', () => body.classList.toggle('hidden'));
+
+    els.notesList.appendChild(li);
+  }
+}
+
+els.addUnitForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  addUnit(els.unitInput.value);
+  els.unitInput.value = '';
+});
+
+els.unitFilter.addEventListener('click', (e) => {
+  const delBtn = e.target.closest('.unit-chip-delete');
+  if (delBtn) {
+    e.stopPropagation();
+    deleteUnit(delBtn.closest('[data-unit-id]').dataset.unitId);
+    return;
+  }
+  const chip = e.target.closest('[data-unit-id]');
+  if (!chip) return;
+  selectedUnitId = chip.dataset.unitId;
+  renderNotes();
+});
+
+els.addNoteForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (selectedUnitId === 'all') return;
+  const title = els.noteTitleInput.value.trim();
+  const content = els.noteContentInput.value.trim();
+  if (!title || !content) return;
+  addNote(selectedUnitId, title, content);
+  els.noteTitleInput.value = '';
+  els.noteContentInput.value = '';
+  els.noteTitleInput.focus();
+});
+
+els.noteSearchInput.addEventListener('input', () => {
+  noteSearchQuery = els.noteSearchInput.value;
+  renderNotes();
+});
+
+els.notesTabBtn.addEventListener('click', () => switchTab('notes'));
+
 els.syncBtn.addEventListener('click', () => {
   els.syncPanel.classList.toggle('hidden');
 });
@@ -454,23 +678,29 @@ async function connectRoom(code, { adopt = false } = {}) {
     if (snap.exists()) {
       tasks = snap.data().items || [];
       history = snap.data().history || {};
+      noteUnits = snap.data().noteUnits || [];
+      notes = snap.data().notes || [];
       resetIfNeeded(tasks);
       render();
       renderCalendar();
+      renderNotes();
       saveLocal();
     } else {
-      await fsMod.setDoc(docRef, { items: tasks, history, updatedAt: Date.now() });
+      await fsMod.setDoc(docRef, { items: tasks, history, noteUnits, notes, updatedAt: Date.now() });
     }
   } else {
     const snap = await fsMod.getDoc(docRef);
     if (!snap.exists()) {
-      await fsMod.setDoc(docRef, { items: tasks, history, updatedAt: Date.now() });
+      await fsMod.setDoc(docRef, { items: tasks, history, noteUnits, notes, updatedAt: Date.now() });
     } else {
       tasks = snap.data().items || [];
       history = snap.data().history || {};
+      noteUnits = snap.data().noteUnits || [];
+      notes = snap.data().notes || [];
       resetIfNeeded(tasks);
       render();
       renderCalendar();
+      renderNotes();
       saveLocal();
     }
   }
@@ -483,9 +713,12 @@ async function connectRoom(code, { adopt = false } = {}) {
     if (!snap.exists()) return;
     tasks = snap.data().items || [];
     history = snap.data().history || {};
+    noteUnits = snap.data().noteUnits || [];
+    notes = snap.data().notes || [];
     resetIfNeeded(tasks);
     render();
     renderCalendar();
+    renderNotes();
     saveLocal();
   });
 }
@@ -580,12 +813,14 @@ els.todayTabBtn.addEventListener('click', () => switchTab('today'));
 els.calendarTabBtn.addEventListener('click', () => switchTab('calendar'));
 
 function switchTab(tab) {
-  const isToday = tab === 'today';
-  els.todayTabBtn.classList.toggle('active', isToday);
-  els.calendarTabBtn.classList.toggle('active', !isToday);
-  els.todayView.classList.toggle('hidden', !isToday);
-  els.calendarView.classList.toggle('hidden', isToday);
-  if (!isToday) renderCalendar();
+  els.todayTabBtn.classList.toggle('active', tab === 'today');
+  els.calendarTabBtn.classList.toggle('active', tab === 'calendar');
+  els.notesTabBtn.classList.toggle('active', tab === 'notes');
+  els.todayView.classList.toggle('hidden', tab !== 'today');
+  els.calendarView.classList.toggle('hidden', tab !== 'calendar');
+  els.notesView.classList.toggle('hidden', tab !== 'notes');
+  if (tab === 'calendar') renderCalendar();
+  if (tab === 'notes') renderNotes();
 }
 
 els.prevMonthBtn.addEventListener('click', () => {
@@ -688,6 +923,7 @@ function showDayDetail(dateKey) {
 recordHistorySnapshot();
 saveLocal();
 render();
+renderNotes();
 initFirebase();
 
 if ('serviceWorker' in navigator) {

@@ -563,3 +563,92 @@ body {
 .task-check.readonly {
   pointer-events: none;
 }
+
+.unit-filter {
+  flex-wrap: wrap;
+}
+
+.unit-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unit-chip-delete {
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+.note-search {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid #F1E2C3;
+  border-radius: 12px;
+  font-size: 14px;
+  background: #fff;
+  margin-bottom: 14px;
+  color: #4A2C13;
+}
+
+.note-add-form textarea {
+  flex: 1 1 100%;
+  min-width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #F1E2C3;
+  border-radius: 12px;
+  font-size: 14px;
+  background: #fff;
+  font-family: inherit;
+  color: #4A2C13;
+  resize: vertical;
+}
+
+.note-list {
+  gap: 10px;
+}
+
+.note-item {
+  display: block;
+  background: #fff;
+  border-radius: 12px;
+  border: 2px solid #FFF3D6;
+  padding: 12px 14px;
+}
+
+.note-item.reviewed {
+  background: #FFFBF0;
+}
+
+.note-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.note-title-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  flex-wrap: wrap;
+}
+
+.note-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.note-item.reviewed .note-title {
+  color: #C9AD87;
+}
+
+.note-content {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed #F1E2C3;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: #6B4A2A;
+}

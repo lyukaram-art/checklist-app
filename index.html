@@ -106,6 +106,7 @@
     <nav class="tab-nav">
       <button id="todayTabBtn" class="tab-btn active">오늘</button>
       <button id="calendarTabBtn" class="tab-btn">달력</button>
+      <button id="notesTabBtn" class="tab-btn">오답노트</button>
     </nav>
 
     <div id="todayView">
@@ -189,6 +190,28 @@
         <h3 id="dayDetailTitle"></h3>
         <ul id="dayDetailList" class="task-list"></ul>
       </div>
+    </div>
+
+    <div id="notesView" class="hidden">
+      <form id="addUnitForm" class="add-form">
+        <input id="unitInput" type="text" placeholder="단원 이름 (예: 수학 - 이차함수)" required>
+        <button type="submit" class="add-btn">폴더 추가</button>
+      </form>
+
+      <nav id="unitFilter" class="category-filter unit-filter">
+        <button class="cat-btn active" data-unit-id="all">전체</button>
+      </nav>
+
+      <input id="noteSearchInput" type="text" class="note-search" placeholder="🔍 제목/내용 검색">
+
+      <form id="addNoteForm" class="add-form note-add-form hidden">
+        <input id="noteTitleInput" type="text" placeholder="개념/문제 제목" required>
+        <textarea id="noteContentInput" rows="3" placeholder="틀린 이유, 헷갈린 부분, 정리 내용" required></textarea>
+        <button type="submit" class="add-btn">노트 추가</button>
+      </form>
+      <p id="noteAddHint" class="sync-status hidden"></p>
+
+      <ul id="notesList" class="task-list note-list"></ul>
     </div>
   </div>
 
