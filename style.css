@@ -296,6 +296,10 @@ body {
 }
 
 .exp-bar-wrap {
+  margin-bottom: 10px;
+}
+
+.exp-bar-wrap:last-of-type {
   margin-bottom: 16px;
 }
 
@@ -308,9 +312,16 @@ body {
 
 .exp-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #FFC93C, #E4572E);
   border-radius: 999px;
   transition: width 0.3s ease;
+}
+
+.exp-bar-fill-game {
+  background: linear-gradient(90deg, #FFC93C, #E4572E);
+}
+
+.exp-bar-fill-study {
+  background: linear-gradient(90deg, #9FC9E8, #2E6DA4);
 }
 
 .exp-bar-label {

@@ -35,8 +35,10 @@ const els = {
   dayDetail: document.getElementById('dayDetail'),
   dayDetailTitle: document.getElementById('dayDetailTitle'),
   dayDetailList: document.getElementById('dayDetailList'),
-  expBarFill: document.getElementById('expBarFill'),
-  expBarLabel: document.getElementById('expBarLabel'),
+  gameExpFill: document.getElementById('gameExpFill'),
+  gameExpLabel: document.getElementById('gameExpLabel'),
+  studyExpFill: document.getElementById('studyExpFill'),
+  studyExpLabel: document.getElementById('studyExpLabel'),
   gameLevelValue: document.getElementById('gameLevelValue'),
   gameLevelDays: document.getElementById('gameLevelDays'),
   studyLevelValue: document.getElementById('studyLevelValue'),
@@ -214,8 +216,18 @@ function render() {
     .sort((a, b) => a.date.localeCompare(b.date));
   renderList(els.dateList, dateTasks, { showDate: true });
 
-  renderExpBar([...dailyTasks, ...weeklyTasks, ...dateTasks]);
+  renderExpBars(getTodayItemsAll(todayKey, todayWeekday));
   renderLevels();
+}
+
+function getTodayItemsAll(todayKey, todayWeekday) {
+  const daily = tasks.filter(t => t.type === 'daily');
+  const weekly = tasks.filter(t => t.type === 'weekly' && (t.weekday === undefined || t.weekday === todayWeekday));
+  const date = tasks.filter(t => t.type === 'date' && (
+    t.date === todayKey ||
+    (t.category === 'study' && !t.checked && t.date < todayKey)
+  ));
+  return [...daily, ...weekly, ...date];
 }
 
 function computeCategoryLevels() {
@@ -243,12 +255,16 @@ function renderLevels() {
   els.studyLevelDays.textContent = `완료한 날 ${levels.study.days}일`;
 }
 
-function renderExpBar(todayItems) {
-  const total = todayItems.length;
-  const done = todayItems.filter(t => t.checked).length;
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-  els.expBarFill.style.width = `${pct}%`;
-  els.expBarLabel.textContent = `오늘 경험치 ${pct}%`;
+function renderExpBars(todayItems) {
+  for (const cat of ['game', 'study']) {
+    const items = todayItems.filter(t => t.category === cat);
+    const total = items.length;
+    const done = items.filter(t => t.checked).length;
+    const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+    const label = cat === 'game' ? '게임' : '학업';
+    els[`${cat}ExpFill`].style.width = `${pct}%`;
+    els[`${cat}ExpLabel`].textContent = `${label} 경험치 ${pct}%`;
+  }
 }
 
 function formatDateShort(dateKey) {
