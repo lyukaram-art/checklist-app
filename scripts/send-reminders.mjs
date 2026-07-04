@@ -1,6 +1,19 @@
 import admin from 'firebase-admin';
 
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+if (!process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+  console.error('FIREBASE_SERVICE_ACCOUNT_KEY 환경변수(시크릿)가 비어있습니다.');
+  process.exit(1);
+}
+
+let serviceAccount;
+try {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+} catch (err) {
+  console.error('FIREBASE_SERVICE_ACCOUNT_KEY가 올바른 JSON이 아닙니다:', err.message);
+  process.exit(1);
+}
+
+console.log('서비스 계정 프로젝트 ID:', serviceAccount.project_id);
 
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
@@ -34,12 +47,15 @@ async function run() {
   const snapshot = await db.collection('checklists').get();
   const messaging = admin.messaging();
 
+  console.log(`checklists 문서 ${snapshot.size}개 확인, 기준 시각(KST): ${now.toISOString()}`);
+
   for (const doc of snapshot.docs) {
     const data = doc.data();
     const tokens = data.pushTokens || [];
-    if (tokens.length === 0) continue;
-
     const remaining = remainingItemsToday(data.items, now);
+    console.log(`- ${doc.id}: 토큰 ${tokens.length}개, 전체 항목 ${(data.items || []).length}개, 남은 항목 ${remaining.length}개`);
+
+    if (tokens.length === 0) continue;
     if (remaining.length === 0) continue;
 
     const body = remaining.map((t) => t.text).join(', ') + ' 남았어요';
