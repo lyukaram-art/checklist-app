@@ -574,9 +574,15 @@ function renameNote(id) {
   persist();
 }
 
+function startOfDay(ts) {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 function formatLastReviewed(ts) {
   if (!ts) return '복습한 적 없음';
-  const days = Math.floor((Date.now() - ts) / 86400000);
+  const days = Math.round((startOfDay(Date.now()) - startOfDay(ts)) / 86400000);
   if (days <= 0) return '오늘 복습함';
   if (days < 30) return `${days}일 전 복습`;
   const months = Math.floor(days / 30);
