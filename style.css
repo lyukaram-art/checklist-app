@@ -415,6 +415,15 @@ body {
   cursor: pointer;
 }
 
+.edit-btn {
+  border: none;
+  background: transparent;
+  color: #A9754A;
+  font-size: 15px;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
 .empty-hint {
   color: #C9AD87;
   font-size: 13px;
@@ -631,6 +640,14 @@ body {
 .unit-card-count {
   font-size: 11px;
   color: #C9AD87;
+}
+
+.unit-card-edit {
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  color: #A9754A;
+  font-size: 12px;
 }
 
 .unit-card-delete {

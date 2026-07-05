@@ -500,6 +500,17 @@ function addUnit(name) {
   persist();
 }
 
+function renameUnit(id) {
+  const unit = noteUnits.find(u => u.id === id);
+  if (!unit) return;
+  const name = prompt('새 폴더 이름', unit.name);
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  unit.name = trimmed;
+  persist();
+}
+
 function deleteUnit(id) {
   if (!confirm('이 폴더와 하위 폴더, 안의 노트를 모두 삭제할까요?')) return;
   const target = noteUnits.find(u => u.id === id);
@@ -529,6 +540,17 @@ function addNote(unitId, title, content) {
 
 function deleteNote(id) {
   notes = notes.filter(n => n.id !== id);
+  persist();
+}
+
+function renameNote(id) {
+  const n = notes.find(x => x.id === id);
+  if (!n) return;
+  const title = prompt('새 제목', n.title);
+  if (title === null) return;
+  const trimmed = title.trim();
+  if (!trimmed) return;
+  n.title = trimmed;
   persist();
 }
 
@@ -645,6 +667,11 @@ function renderUnitGrid() {
       card.appendChild(badge);
     }
 
+    const edit = document.createElement('span');
+    edit.className = 'unit-card-edit';
+    edit.textContent = '✎';
+    card.appendChild(edit);
+
     const del = document.createElement('span');
     del.className = 'unit-card-delete';
     del.textContent = '✕';
@@ -684,6 +711,13 @@ function renderNoteList(list, { showPath = false } = {}) {
       titleWrap.appendChild(badge);
     }
     header.appendChild(titleWrap);
+
+    const edit = document.createElement('button');
+    edit.className = 'edit-btn';
+    edit.title = '제목 수정';
+    edit.textContent = '✎';
+    edit.addEventListener('click', () => renameNote(n.id));
+    header.appendChild(edit);
 
     const del = document.createElement('button');
     del.className = 'delete-btn';
@@ -743,6 +777,12 @@ els.unitBreadcrumb.addEventListener('click', (e) => {
 });
 
 els.unitGrid.addEventListener('click', (e) => {
+  const editBtn = e.target.closest('.unit-card-edit');
+  if (editBtn) {
+    e.stopPropagation();
+    renameUnit(editBtn.closest('[data-unit-id]').dataset.unitId);
+    return;
+  }
   const delBtn = e.target.closest('.unit-card-delete');
   if (delBtn) {
     e.stopPropagation();
