@@ -65,11 +65,13 @@ const els = {
   reviewSetupHint: document.getElementById('reviewSetupHint'),
   reviewPlayPanel: document.getElementById('reviewPlayPanel'),
   reviewProgress: document.getElementById('reviewProgress'),
-  reviewCardCheck: document.getElementById('reviewCardCheck'),
   reviewCardTitle: document.getElementById('reviewCardTitle'),
+  reviewCardMeta: document.getElementById('reviewCardMeta'),
   reviewCardContent: document.getElementById('reviewCardContent'),
   revealBtn: document.getElementById('revealBtn'),
-  reviewNextBtn: document.getElementById('reviewNextBtn'),
+  reviewGradeRow: document.getElementById('reviewGradeRow'),
+  gradeForgotBtn: document.getElementById('gradeForgotBtn'),
+  gradeRememberedBtn: document.getElementById('gradeRememberedBtn'),
   reviewEndBtn: document.getElementById('reviewEndBtn'),
 };
 
@@ -84,6 +86,7 @@ let selectedUnitId = 'all';
 let noteSearchQuery = '';
 let reviewQueue = [];
 let reviewIndex = 0;
+let reviewSessionGrades = [];
 let roomCode = localStorage.getItem(LOCAL_ROOM_KEY) || generateRoomCode();
 localStorage.setItem(LOCAL_ROOM_KEY, roomCode);
 els.roomCodeDisplay.textContent = roomCode;
@@ -517,7 +520,9 @@ function addNote(unitId, title, content) {
     title: title.trim(),
     content: content.trim(),
     createdAt: Date.now(),
-    reviewed: false,
+    lastReviewedAt: null,
+    reviewCount: 0,
+    rememberedCount: 0,
   });
   persist();
 }
@@ -527,11 +532,50 @@ function deleteNote(id) {
   persist();
 }
 
-function toggleNoteReviewed(id) {
-  const n = notes.find(x => x.id === id);
-  if (!n) return;
-  n.reviewed = !n.reviewed;
-  persist();
+function formatLastReviewed(ts) {
+  if (!ts) return '복습한 적 없음';
+  const days = Math.floor((Date.now() - ts) / 86400000);
+  if (days <= 0) return '오늘 복습함';
+  if (days < 30) return `${days}일 전 복습`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}개월 전 복습`;
+  return `${Math.floor(months / 12)}년 전 복습`;
+}
+
+function formatRememberRate(n) {
+  const count = n.reviewCount || 0;
+  if (count === 0) return '기억률 -';
+  return `기억률 ${Math.round(((n.rememberedCount || 0) / count) * 100)}%`;
+}
+
+function noteMeta(n) {
+  return `${formatLastReviewed(n.lastReviewedAt)} · ${formatRememberRate(n)}`;
+}
+
+function reviewPriority(n) {
+  const daysSince = n.lastReviewedAt ? (Date.now() - n.lastReviewedAt) / 86400000 : 9999;
+  const rate = n.reviewCount ? (n.rememberedCount || 0) / n.reviewCount : 0;
+  return daysSince * (1.1 - rate);
+}
+
+function weightedSample(pool, count) {
+  const items = pool.map(n => ({ note: n, weight: Math.max(reviewPriority(n), 0.01) }));
+  const picked = [];
+  while (picked.length < count && items.length > 0) {
+    const totalWeight = items.reduce((sum, it) => sum + it.weight, 0);
+    let r = Math.random() * totalWeight;
+    let idx = items.length - 1;
+    for (let i = 0; i < items.length; i++) {
+      r -= items[i].weight;
+      if (r <= 0) {
+        idx = i;
+        break;
+      }
+    }
+    picked.push(items[idx].note);
+    items.splice(idx, 1);
+  }
+  return picked;
 }
 
 function noteMatchesSearch(n) {
@@ -622,17 +666,10 @@ function renderNoteList(list, { showPath = false } = {}) {
 
   for (const n of list) {
     const li = document.createElement('li');
-    li.className = 'note-item' + (n.reviewed ? ' reviewed' : '');
+    li.className = 'note-item';
 
     const header = document.createElement('div');
     header.className = 'note-header';
-
-    const check = document.createElement('button');
-    check.className = 'task-check' + (n.reviewed ? ' checked' : '');
-    check.title = '복습 완료 표시';
-    check.textContent = n.reviewed ? '✓' : '';
-    check.addEventListener('click', () => toggleNoteReviewed(n.id));
-    header.appendChild(check);
 
     const titleWrap = document.createElement('div');
     titleWrap.className = 'note-title-wrap';
@@ -655,6 +692,11 @@ function renderNoteList(list, { showPath = false } = {}) {
     header.appendChild(del);
 
     li.appendChild(header);
+
+    const meta = document.createElement('p');
+    meta.className = 'note-meta';
+    meta.textContent = noteMeta(n);
+    li.appendChild(meta);
 
     const body = document.createElement('p');
     body.className = 'note-content hidden';
@@ -744,15 +786,6 @@ function allUnitsFlat() {
   return result;
 }
 
-function shuffled(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
 function renderReviewUnitCheckboxes() {
   els.reviewUnitCheckboxes.innerHTML = '';
   const flat = allUnitsFlat();
@@ -781,20 +814,44 @@ function renderReviewUnitCheckboxes() {
   }
 }
 
-function updateReviewCheckUI() {
-  const n = reviewQueue[reviewIndex];
-  els.reviewCardCheck.className = 'task-check' + (n.reviewed ? ' checked' : '');
-  els.reviewCardCheck.textContent = n.reviewed ? '✓' : '';
-}
-
 function showReviewCard() {
   const n = reviewQueue[reviewIndex];
   els.reviewProgress.textContent = `${reviewIndex + 1} / ${reviewQueue.length}`;
-  updateReviewCheckUI();
   els.reviewCardTitle.textContent = n.title;
+  els.reviewCardMeta.textContent = noteMeta(n);
   els.reviewCardContent.textContent = n.content;
   els.reviewCardContent.classList.add('hidden');
-  els.reviewNextBtn.textContent = reviewIndex === reviewQueue.length - 1 ? '완료' : '다음';
+  els.revealBtn.classList.remove('hidden');
+  els.reviewGradeRow.classList.remove('hidden');
+  els.reviewEndBtn.textContent = '종료';
+}
+
+function finishReview() {
+  const total = reviewQueue.length;
+  const rememberedCount = reviewSessionGrades.filter(Boolean).length;
+  els.reviewProgress.textContent = '';
+  els.reviewCardTitle.textContent = `이번 복습 결과: ${total}개 중 ${rememberedCount}개 기억함`;
+  els.reviewCardMeta.textContent = '';
+  els.reviewCardContent.classList.add('hidden');
+  els.revealBtn.classList.add('hidden');
+  els.reviewGradeRow.classList.add('hidden');
+  els.reviewEndBtn.textContent = '닫기';
+}
+
+function gradeCurrentCard(remembered) {
+  const n = reviewQueue[reviewIndex];
+  n.lastReviewedAt = Date.now();
+  n.reviewCount = (n.reviewCount || 0) + 1;
+  n.rememberedCount = (n.rememberedCount || 0) + (remembered ? 1 : 0);
+  reviewSessionGrades[reviewIndex] = remembered;
+  persist();
+
+  if (reviewIndex >= reviewQueue.length - 1) {
+    finishReview();
+  } else {
+    reviewIndex += 1;
+    showReviewCard();
+  }
 }
 
 els.reviewBtn.addEventListener('click', () => {
@@ -824,7 +881,8 @@ els.startReviewBtn.addEventListener('click', () => {
     return;
   }
   const count = Math.max(1, Math.min(pool.length, Math.floor(Number(els.reviewCountInput.value)) || 1));
-  reviewQueue = shuffled(pool).slice(0, count);
+  reviewQueue = weightedSample(pool, count);
+  reviewSessionGrades = [];
   reviewIndex = 0;
   els.reviewSetupPanel.classList.add('hidden');
   els.reviewPlayPanel.classList.remove('hidden');
@@ -835,24 +893,13 @@ els.revealBtn.addEventListener('click', () => {
   els.reviewCardContent.classList.toggle('hidden');
 });
 
-els.reviewCardCheck.addEventListener('click', () => {
-  toggleNoteReviewed(reviewQueue[reviewIndex].id);
-  updateReviewCheckUI();
-});
-
-els.reviewNextBtn.addEventListener('click', () => {
-  if (reviewIndex >= reviewQueue.length - 1) {
-    els.reviewPlayPanel.classList.add('hidden');
-    reviewQueue = [];
-    return;
-  }
-  reviewIndex += 1;
-  showReviewCard();
-});
+els.gradeForgotBtn.addEventListener('click', () => gradeCurrentCard(false));
+els.gradeRememberedBtn.addEventListener('click', () => gradeCurrentCard(true));
 
 els.reviewEndBtn.addEventListener('click', () => {
   els.reviewPlayPanel.classList.add('hidden');
   reviewQueue = [];
+  reviewSessionGrades = [];
 });
 
 els.syncBtn.addEventListener('click', () => {

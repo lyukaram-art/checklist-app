@@ -701,7 +701,9 @@ body {
   font-weight: 600;
 }
 
-.note-item.reviewed .note-title {
+.note-meta {
+  margin: 4px 0 0;
+  font-size: 12px;
   color: #C9AD87;
 }
 
@@ -762,26 +764,37 @@ body {
   min-height: 120px;
 }
 
-.review-card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 4px;
-}
-
 .review-card-title {
   font-size: 16px;
   font-weight: 700;
   margin: 0;
 }
 
-.review-nav {
+.review-grade-row {
   display: flex;
   gap: 8px;
   margin-top: 12px;
 }
 
-.review-nav .add-btn,
-.review-nav .tab-btn {
+.grade-btn {
   flex: 1;
+  border: none;
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.grade-forgot {
+  background: #C4432B;
+}
+
+.grade-remembered {
+  background: #2E9E5B;
+}
+
+.review-end-btn {
+  width: 100%;
+  margin-top: 8px;
 }
