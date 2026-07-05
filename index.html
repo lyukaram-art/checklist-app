@@ -193,16 +193,16 @@
     </div>
 
     <div id="notesView" class="hidden">
+      <nav id="unitBreadcrumb" class="unit-breadcrumb"></nav>
+
+      <div id="unitGrid" class="unit-grid"></div>
+
       <form id="addUnitForm" class="add-form">
-        <input id="unitInput" type="text" placeholder="단원 이름 (예: 수학 - 이차함수)" required>
+        <input id="unitInput" type="text" placeholder="새 폴더 이름" required>
         <button type="submit" class="add-btn">폴더 추가</button>
       </form>
 
-      <nav id="unitFilter" class="category-filter unit-filter">
-        <button class="cat-btn active" data-unit-id="all">전체</button>
-      </nav>
-
-      <input id="noteSearchInput" type="text" class="note-search" placeholder="🔍 제목/내용 검색">
+      <input id="noteSearchInput" type="text" class="note-search" placeholder="🔍 전체 폴더에서 검색">
 
       <form id="addNoteForm" class="add-form note-add-form hidden">
         <input id="noteTitleInput" type="text" placeholder="개념/문제 제목" required>

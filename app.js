@@ -47,9 +47,10 @@ const els = {
   studyLevelDays: document.getElementById('studyLevelDays'),
   notesTabBtn: document.getElementById('notesTabBtn'),
   notesView: document.getElementById('notesView'),
+  unitBreadcrumb: document.getElementById('unitBreadcrumb'),
+  unitGrid: document.getElementById('unitGrid'),
   addUnitForm: document.getElementById('addUnitForm'),
   unitInput: document.getElementById('unitInput'),
-  unitFilter: document.getElementById('unitFilter'),
   noteSearchInput: document.getElementById('noteSearchInput'),
   addNoteForm: document.getElementById('addNoteForm'),
   noteTitleInput: document.getElementById('noteTitleInput'),
@@ -436,18 +437,60 @@ els.addForm.addEventListener('submit', (e) => {
   els.taskInput.focus();
 });
 
+function parentOf(unit) {
+  return unit.parentId ?? null;
+}
+
+function currentParentId() {
+  return selectedUnitId === 'all' ? null : selectedUnitId;
+}
+
+function childUnits(parentId) {
+  return noteUnits.filter(u => parentOf(u) === parentId);
+}
+
+function collectDescendantUnitIds(id) {
+  const direct = childUnits(id).map(u => u.id);
+  return direct.reduce((acc, cid) => acc.concat(cid, collectDescendantUnitIds(cid)), []);
+}
+
+function unitPath(id) {
+  const path = [];
+  let cur = noteUnits.find(u => u.id === id);
+  while (cur) {
+    path.unshift(cur);
+    cur = parentOf(cur) ? noteUnits.find(u => u.id === parentOf(cur)) : null;
+  }
+  return path;
+}
+
+function notePathLabel(unitId) {
+  const path = unitPath(unitId);
+  return path.length ? path.map(u => u.name).join(' › ') : '(삭제된 폴더)';
+}
+
+function countNotesInSubtree(id) {
+  const ids = new Set([id, ...collectDescendantUnitIds(id)]);
+  return notes.filter(n => ids.has(n.unitId)).length;
+}
+
 function addUnit(name) {
   const trimmed = name.trim();
   if (!trimmed) return;
-  noteUnits.push({ id: crypto.randomUUID(), name: trimmed });
+  noteUnits.push({ id: crypto.randomUUID(), name: trimmed, parentId: currentParentId() });
   persist();
 }
 
 function deleteUnit(id) {
-  if (!confirm('이 단원과 안의 노트를 모두 삭제할까요?')) return;
-  noteUnits = noteUnits.filter(u => u.id !== id);
-  notes = notes.filter(n => n.unitId !== id);
-  if (selectedUnitId === id) selectedUnitId = 'all';
+  if (!confirm('이 폴더와 하위 폴더, 안의 노트를 모두 삭제할까요?')) return;
+  const target = noteUnits.find(u => u.id === id);
+  const fallbackParentId = target ? parentOf(target) : null;
+  const idsToRemove = new Set([id, ...collectDescendantUnitIds(id)]);
+  noteUnits = noteUnits.filter(u => !idsToRemove.has(u.id));
+  notes = notes.filter(n => !idsToRemove.has(n.unitId));
+  if (idsToRemove.has(selectedUnitId)) {
+    selectedUnitId = fallbackParentId ?? 'all';
+  }
   persist();
 }
 
@@ -475,59 +518,83 @@ function toggleNoteReviewed(id) {
   persist();
 }
 
-function unitName(unitId) {
-  return noteUnits.find(u => u.id === unitId)?.name || '(삭제된 단원)';
-}
-
 function noteMatchesSearch(n) {
-  if (!noteSearchQuery) return true;
-  const q = noteSearchQuery.toLowerCase();
+  if (!noteSearchQuery.trim()) return true;
+  const q = noteSearchQuery.trim().toLowerCase();
   return n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q);
 }
 
-function visibleNotes() {
-  return notes
-    .filter(n => selectedUnitId === 'all' || n.unitId === selectedUnitId)
-    .filter(noteMatchesSearch)
-    .sort((a, b) => b.createdAt - a.createdAt);
+function notesInCurrentFolder() {
+  if (selectedUnitId === 'all') return [];
+  return notes.filter(n => n.unitId === selectedUnitId).sort((a, b) => b.createdAt - a.createdAt);
 }
 
-function renderUnitFilter() {
-  els.unitFilter.querySelectorAll('[data-dynamic-unit]').forEach(b => b.remove());
-  for (const u of noteUnits) {
-    const btn = document.createElement('button');
-    btn.className = 'cat-btn unit-chip' + (selectedUnitId === u.id ? ' active' : '');
-    btn.dataset.dynamicUnit = 'true';
-    btn.dataset.unitId = u.id;
+function searchAllNotes() {
+  return notes.filter(noteMatchesSearch).sort((a, b) => b.createdAt - a.createdAt);
+}
 
-    const label = document.createElement('span');
-    label.textContent = u.name;
-    btn.appendChild(label);
+function renderBreadcrumb() {
+  els.unitBreadcrumb.innerHTML = '';
+
+  const rootBtn = document.createElement('button');
+  rootBtn.className = 'breadcrumb-item' + (selectedUnitId === 'all' ? ' active' : '');
+  rootBtn.textContent = '전체';
+  rootBtn.dataset.unitId = 'all';
+  els.unitBreadcrumb.appendChild(rootBtn);
+
+  if (selectedUnitId === 'all') return;
+
+  for (const u of unitPath(selectedUnitId)) {
+    const sep = document.createElement('span');
+    sep.className = 'breadcrumb-sep';
+    sep.textContent = '›';
+    els.unitBreadcrumb.appendChild(sep);
+
+    const btn = document.createElement('button');
+    btn.className = 'breadcrumb-item' + (u.id === selectedUnitId ? ' active' : '');
+    btn.textContent = u.name;
+    btn.dataset.unitId = u.id;
+    els.unitBreadcrumb.appendChild(btn);
+  }
+}
+
+function renderUnitGrid() {
+  const children = childUnits(currentParentId());
+  els.unitGrid.innerHTML = '';
+  for (const u of children) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'unit-card';
+    card.dataset.unitId = u.id;
+
+    const icon = document.createElement('span');
+    icon.className = 'unit-card-icon';
+    icon.textContent = '📁';
+    card.appendChild(icon);
+
+    const name = document.createElement('span');
+    name.className = 'unit-card-name';
+    name.textContent = u.name;
+    card.appendChild(name);
+
+    const count = countNotesInSubtree(u.id);
+    if (count > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'unit-card-count';
+      badge.textContent = `${count}개`;
+      card.appendChild(badge);
+    }
 
     const del = document.createElement('span');
-    del.className = 'unit-chip-delete';
+    del.className = 'unit-card-delete';
     del.textContent = '✕';
-    btn.appendChild(del);
+    card.appendChild(del);
 
-    els.unitFilter.appendChild(btn);
+    els.unitGrid.appendChild(card);
   }
-  els.unitFilter.querySelector('[data-unit-id="all"]').classList.toggle('active', selectedUnitId === 'all');
 }
 
-function renderNotes() {
-  renderUnitFilter();
-
-  const hasUnits = noteUnits.length > 0;
-  const canAdd = hasUnits && selectedUnitId !== 'all';
-  els.addNoteForm.classList.toggle('hidden', !canAdd);
-  els.noteAddHint.classList.toggle('hidden', canAdd);
-  if (!canAdd) {
-    els.noteAddHint.textContent = hasUnits
-      ? '단원을 선택하면 노트를 추가할 수 있어요.'
-      : '먼저 위에서 단원(폴더)을 추가해 주세요.';
-  }
-
-  const list = visibleNotes();
+function renderNoteList(list, { showPath = false } = {}) {
   els.notesList.innerHTML = '';
   if (list.length === 0) {
     const li = document.createElement('li');
@@ -557,10 +624,10 @@ function renderNotes() {
     title.className = 'note-title';
     title.textContent = n.title;
     titleWrap.appendChild(title);
-    if (selectedUnitId === 'all') {
+    if (showPath) {
       const badge = document.createElement('span');
       badge.className = 'date-badge';
-      badge.textContent = unitName(n.unitId);
+      badge.textContent = notePathLabel(n.unitId);
       titleWrap.appendChild(badge);
     }
     header.appendChild(titleWrap);
@@ -584,22 +651,49 @@ function renderNotes() {
   }
 }
 
+function renderNotes() {
+  renderBreadcrumb();
+
+  const searching = noteSearchQuery.trim() !== '';
+  els.unitGrid.classList.toggle('hidden', searching);
+  if (!searching) renderUnitGrid();
+
+  const hasUnits = noteUnits.length > 0;
+  const canAdd = hasUnits && selectedUnitId !== 'all';
+  els.addNoteForm.classList.toggle('hidden', !canAdd);
+  els.noteAddHint.classList.toggle('hidden', canAdd);
+  if (!canAdd) {
+    els.noteAddHint.textContent = hasUnits
+      ? '폴더를 선택하면 노트를 추가할 수 있어요.'
+      : '먼저 위에서 폴더를 추가해 주세요.';
+  }
+
+  renderNoteList(searching ? searchAllNotes() : notesInCurrentFolder(), { showPath: searching });
+}
+
 els.addUnitForm.addEventListener('submit', (e) => {
   e.preventDefault();
   addUnit(els.unitInput.value);
   els.unitInput.value = '';
 });
 
-els.unitFilter.addEventListener('click', (e) => {
-  const delBtn = e.target.closest('.unit-chip-delete');
+els.unitBreadcrumb.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-unit-id]');
+  if (!btn) return;
+  selectedUnitId = btn.dataset.unitId;
+  renderNotes();
+});
+
+els.unitGrid.addEventListener('click', (e) => {
+  const delBtn = e.target.closest('.unit-card-delete');
   if (delBtn) {
     e.stopPropagation();
     deleteUnit(delBtn.closest('[data-unit-id]').dataset.unitId);
     return;
   }
-  const chip = e.target.closest('[data-unit-id]');
-  if (!chip) return;
-  selectedUnitId = chip.dataset.unitId;
+  const card = e.target.closest('[data-unit-id]');
+  if (!card) return;
+  selectedUnitId = card.dataset.unitId;
   renderNotes();
 });
 
