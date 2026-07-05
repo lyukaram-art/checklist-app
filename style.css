@@ -734,6 +734,39 @@ body {
   color: #6B4A2A;
 }
 
+.note-edit-content-btn {
+  display: block;
+  margin-top: 8px;
+  border: none;
+  background: transparent;
+  color: #A9754A;
+  font-size: 12px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.note-edit-textarea {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 2px solid #F1E2C3;
+  border-radius: 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #4A2C13;
+  resize: vertical;
+}
+
+.note-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.note-edit-cancel {
+  background: #E8C89A;
+}
+
 .review-toggle-btn {
   width: 100%;
   margin-bottom: 14px;

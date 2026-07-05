@@ -84,6 +84,7 @@ let selectedDayKey = null;
 let categoryFilter = 'all';
 let selectedUnitId = 'all';
 let noteSearchQuery = '';
+let editingNoteId = null;
 let reviewQueue = [];
 let reviewIndex = 0;
 let reviewSessionGrades = [];
@@ -732,12 +733,58 @@ function renderNoteList(list, { showPath = false } = {}) {
     meta.textContent = noteMeta(n);
     li.appendChild(meta);
 
-    const body = document.createElement('p');
-    body.className = 'note-content hidden';
-    body.textContent = n.content;
-    li.appendChild(body);
+    if (n.id === editingNoteId) {
+      const textarea = document.createElement('textarea');
+      textarea.className = 'note-edit-textarea';
+      textarea.rows = 4;
+      textarea.value = n.content;
+      li.appendChild(textarea);
 
-    titleWrap.addEventListener('click', () => body.classList.toggle('hidden'));
+      const actions = document.createElement('div');
+      actions.className = 'note-edit-actions';
+
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'small-btn';
+      saveBtn.textContent = '저장';
+      saveBtn.addEventListener('click', () => {
+        const trimmed = textarea.value.trim();
+        if (!trimmed) return;
+        n.content = trimmed;
+        editingNoteId = null;
+        persist();
+      });
+      actions.appendChild(saveBtn);
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'small-btn note-edit-cancel';
+      cancelBtn.textContent = '취소';
+      cancelBtn.addEventListener('click', () => {
+        editingNoteId = null;
+        renderNotes();
+      });
+      actions.appendChild(cancelBtn);
+
+      li.appendChild(actions);
+    } else {
+      const body = document.createElement('p');
+      body.className = 'note-content hidden';
+      body.textContent = n.content;
+      li.appendChild(body);
+
+      titleWrap.addEventListener('click', () => body.classList.toggle('hidden'));
+
+      const editContentBtn = document.createElement('button');
+      editContentBtn.type = 'button';
+      editContentBtn.className = 'note-edit-content-btn';
+      editContentBtn.textContent = '✎ 내용 수정';
+      editContentBtn.addEventListener('click', () => {
+        editingNoteId = n.id;
+        renderNotes();
+      });
+      li.appendChild(editContentBtn);
+    }
 
     els.notesList.appendChild(li);
   }
