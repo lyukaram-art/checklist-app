@@ -230,7 +230,15 @@
         <button type="submit" class="add-btn">폴더 추가</button>
       </form>
 
-      <input id="noteSearchInput" type="text" class="note-search" placeholder="🔍 전체 폴더에서 검색">
+      <div class="note-toolbar">
+        <input id="noteSearchInput" type="text" class="note-search" placeholder="🔍 전체 폴더에서 검색">
+        <select id="noteSortSelect" class="note-sort-select">
+          <option value="recent">최신순</option>
+          <option value="rateAsc">기억률 낮은순</option>
+          <option value="rateDesc">기억률 높은순</option>
+          <option value="oldReview">오래된순</option>
+        </select>
+      </div>
 
       <form id="addNoteForm" class="add-form note-add-form hidden">
         <input id="noteTitleInput" type="text" placeholder="개념/문제 제목" required>

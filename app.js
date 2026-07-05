@@ -52,6 +52,7 @@ const els = {
   addUnitForm: document.getElementById('addUnitForm'),
   unitInput: document.getElementById('unitInput'),
   noteSearchInput: document.getElementById('noteSearchInput'),
+  noteSortSelect: document.getElementById('noteSortSelect'),
   addNoteForm: document.getElementById('addNoteForm'),
   noteTitleInput: document.getElementById('noteTitleInput'),
   noteContentInput: document.getElementById('noteContentInput'),
@@ -84,6 +85,7 @@ let selectedDayKey = null;
 let categoryFilter = 'all';
 let selectedUnitId = 'all';
 let noteSearchQuery = '';
+let noteSortMode = 'recent';
 let editingNoteId = null;
 let reviewQueue = [];
 let reviewIndex = 0;
@@ -575,6 +577,35 @@ function noteMeta(n) {
   return `${formatLastReviewed(n.lastReviewedAt)} · ${formatRememberRate(n)}`;
 }
 
+function noteRateValue(n) {
+  return n.reviewCount ? (n.rememberedCount || 0) / n.reviewCount : -1;
+}
+
+function rememberRateColor(n) {
+  if (!n.reviewCount) return null;
+  const rate = noteRateValue(n);
+  const hue = rate * 210; // 0 = red (낮음), 210 = 파랑 (높음)
+  return `hsl(${hue}, 70%, 45%)`;
+}
+
+function sortNotes(list) {
+  const arr = list.slice();
+  switch (noteSortMode) {
+    case 'rateAsc':
+      arr.sort((a, b) => noteRateValue(a) - noteRateValue(b));
+      break;
+    case 'rateDesc':
+      arr.sort((a, b) => noteRateValue(b) - noteRateValue(a));
+      break;
+    case 'oldReview':
+      arr.sort((a, b) => (a.lastReviewedAt || 0) - (b.lastReviewedAt || 0));
+      break;
+    default:
+      arr.sort((a, b) => b.createdAt - a.createdAt);
+  }
+  return arr;
+}
+
 function reviewPriority(n) {
   const daysSince = n.lastReviewedAt ? (Date.now() - n.lastReviewedAt) / 86400000 : 9999;
   const rate = n.reviewCount ? (n.rememberedCount || 0) / n.reviewCount : 0;
@@ -609,11 +640,11 @@ function noteMatchesSearch(n) {
 
 function notesInCurrentFolder() {
   if (selectedUnitId === 'all') return [];
-  return notes.filter(n => n.unitId === selectedUnitId).sort((a, b) => b.createdAt - a.createdAt);
+  return notes.filter(n => n.unitId === selectedUnitId);
 }
 
 function searchAllNotes() {
-  return notes.filter(noteMatchesSearch).sort((a, b) => b.createdAt - a.createdAt);
+  return notes.filter(noteMatchesSearch);
 }
 
 function renderBreadcrumb() {
@@ -695,6 +726,11 @@ function renderNoteList(list, { showPath = false } = {}) {
   for (const n of list) {
     const li = document.createElement('li');
     li.className = 'note-item';
+    const rateColor = rememberRateColor(n);
+    if (rateColor) {
+      li.style.borderLeftWidth = '5px';
+      li.style.borderLeftColor = rateColor;
+    }
 
     const header = document.createElement('div');
     header.className = 'note-header';
@@ -730,7 +766,12 @@ function renderNoteList(list, { showPath = false } = {}) {
 
     const meta = document.createElement('p');
     meta.className = 'note-meta';
-    meta.textContent = noteMeta(n);
+    meta.textContent = `${formatLastReviewed(n.lastReviewedAt)} · `;
+    const rateSpan = document.createElement('span');
+    rateSpan.className = 'note-rate';
+    rateSpan.textContent = formatRememberRate(n);
+    if (rateColor) rateSpan.style.color = rateColor;
+    meta.appendChild(rateSpan);
     li.appendChild(meta);
 
     if (n.id === editingNoteId) {
@@ -807,7 +848,8 @@ function renderNotes() {
       : '먼저 위에서 폴더를 추가해 주세요.';
   }
 
-  renderNoteList(searching ? searchAllNotes() : notesInCurrentFolder(), { showPath: searching });
+  const list = sortNotes(searching ? searchAllNotes() : notesInCurrentFolder());
+  renderNoteList(list, { showPath: searching });
 }
 
 els.addUnitForm.addEventListener('submit', (e) => {
@@ -856,6 +898,11 @@ els.addNoteForm.addEventListener('submit', (e) => {
 
 els.noteSearchInput.addEventListener('input', () => {
   noteSearchQuery = els.noteSearchInput.value;
+  renderNotes();
+});
+
+els.noteSortSelect.addEventListener('change', () => {
+  noteSortMode = els.noteSortSelect.value;
   renderNotes();
 });
 
