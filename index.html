@@ -9,6 +9,13 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var saved = localStorage.getItem('checklist_theme');
+    var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.dataset.theme = theme;
+  })();
+</script>
 </head>
 <body>
   <div class="side-deco side-deco-left" aria-hidden="true">
@@ -64,6 +71,7 @@
     <header class="header">
       <h1>🍁 체크리스트</h1>
       <div class="header-actions">
+        <button id="themeToggleBtn" class="icon-btn" title="다크모드 전환">🌙</button>
         <button id="notifyBtn" class="icon-btn" title="알림 켜기">🔔</button>
         <button id="syncBtn" class="icon-btn" title="다른 기기와 연동">🔗</button>
       </div>

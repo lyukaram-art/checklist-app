@@ -5,8 +5,10 @@ const LOCAL_HISTORY_KEY = 'checklist_history';
 const LOCAL_ROOM_KEY = 'checklist_room_code';
 const LOCAL_NOTE_UNITS_KEY = 'checklist_note_units';
 const LOCAL_NOTES_KEY = 'checklist_notes';
+const LOCAL_THEME_KEY = 'checklist_theme';
 
 const els = {
+  themeToggleBtn: document.getElementById('themeToggleBtn'),
   syncBtn: document.getElementById('syncBtn'),
   notifyBtn: document.getElementById('notifyBtn'),
   notifyStatus: document.getElementById('notifyStatus'),
@@ -75,6 +77,21 @@ const els = {
   gradeRememberedBtn: document.getElementById('gradeRememberedBtn'),
   reviewEndBtn: document.getElementById('reviewEndBtn'),
 };
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  els.themeToggleBtn.textContent = theme === 'dark' ? '☀️' : '🌙';
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+  if (metaThemeColor) metaThemeColor.content = theme === 'dark' ? '#1C140D' : '#E4572E';
+}
+
+applyTheme(document.documentElement.dataset.theme || 'light');
+
+els.themeToggleBtn.addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem(LOCAL_THEME_KEY, next);
+  applyTheme(next);
+});
 
 let tasks = loadLocalTasks();
 let history = loadLocalHistory();
