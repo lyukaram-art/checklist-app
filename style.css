@@ -714,3 +714,74 @@ body {
   white-space: pre-wrap;
   color: #6B4A2A;
 }
+
+.review-toggle-btn {
+  width: 100%;
+  margin-bottom: 14px;
+  background: #2E6DA4;
+}
+
+.review-setup-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #8B3A1A;
+}
+
+.review-unit-checkboxes {
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+
+.review-unit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+  font-size: 14px;
+}
+
+#reviewCountInput {
+  width: 56px;
+  padding: 8px;
+  border: 1px solid #F1E2C3;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.review-progress {
+  text-align: center;
+  font-size: 13px;
+  color: #A9754A;
+  margin: 0 0 10px;
+}
+
+.review-card {
+  min-height: 120px;
+}
+
+.review-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.review-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.review-nav {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.review-nav .add-btn,
+.review-nav .tab-btn {
+  flex: 1;
+}

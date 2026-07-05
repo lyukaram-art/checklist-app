@@ -57,6 +57,20 @@ const els = {
   noteContentInput: document.getElementById('noteContentInput'),
   noteAddHint: document.getElementById('noteAddHint'),
   notesList: document.getElementById('notesList'),
+  reviewBtn: document.getElementById('reviewBtn'),
+  reviewSetupPanel: document.getElementById('reviewSetupPanel'),
+  reviewUnitCheckboxes: document.getElementById('reviewUnitCheckboxes'),
+  reviewCountInput: document.getElementById('reviewCountInput'),
+  startReviewBtn: document.getElementById('startReviewBtn'),
+  reviewSetupHint: document.getElementById('reviewSetupHint'),
+  reviewPlayPanel: document.getElementById('reviewPlayPanel'),
+  reviewProgress: document.getElementById('reviewProgress'),
+  reviewCardCheck: document.getElementById('reviewCardCheck'),
+  reviewCardTitle: document.getElementById('reviewCardTitle'),
+  reviewCardContent: document.getElementById('reviewCardContent'),
+  revealBtn: document.getElementById('revealBtn'),
+  reviewNextBtn: document.getElementById('reviewNextBtn'),
+  reviewEndBtn: document.getElementById('reviewEndBtn'),
 };
 
 let tasks = loadLocalTasks();
@@ -68,6 +82,8 @@ let selectedDayKey = null;
 let categoryFilter = 'all';
 let selectedUnitId = 'all';
 let noteSearchQuery = '';
+let reviewQueue = [];
+let reviewIndex = 0;
 let roomCode = localStorage.getItem(LOCAL_ROOM_KEY) || generateRoomCode();
 localStorage.setItem(LOCAL_ROOM_KEY, roomCode);
 els.roomCodeDisplay.textContent = roomCode;
@@ -715,6 +731,129 @@ els.noteSearchInput.addEventListener('input', () => {
 });
 
 els.notesTabBtn.addEventListener('click', () => switchTab('notes'));
+
+function allUnitsFlat() {
+  const result = [];
+  function walk(parentId, depth) {
+    for (const u of childUnits(parentId)) {
+      result.push({ id: u.id, name: u.name, depth });
+      walk(u.id, depth + 1);
+    }
+  }
+  walk(null, 0);
+  return result;
+}
+
+function shuffled(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function renderReviewUnitCheckboxes() {
+  els.reviewUnitCheckboxes.innerHTML = '';
+  const flat = allUnitsFlat();
+  if (flat.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'empty-hint';
+    p.textContent = '폴더를 먼저 만들어 주세요.';
+    els.reviewUnitCheckboxes.appendChild(p);
+    return;
+  }
+  for (const u of flat) {
+    const label = document.createElement('label');
+    label.className = 'review-unit-row';
+    label.style.paddingLeft = `${u.depth * 16}px`;
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = u.id;
+    label.appendChild(cb);
+
+    const span = document.createElement('span');
+    span.textContent = `${u.name} (${countNotesInSubtree(u.id)}개)`;
+    label.appendChild(span);
+
+    els.reviewUnitCheckboxes.appendChild(label);
+  }
+}
+
+function updateReviewCheckUI() {
+  const n = reviewQueue[reviewIndex];
+  els.reviewCardCheck.className = 'task-check' + (n.reviewed ? ' checked' : '');
+  els.reviewCardCheck.textContent = n.reviewed ? '✓' : '';
+}
+
+function showReviewCard() {
+  const n = reviewQueue[reviewIndex];
+  els.reviewProgress.textContent = `${reviewIndex + 1} / ${reviewQueue.length}`;
+  updateReviewCheckUI();
+  els.reviewCardTitle.textContent = n.title;
+  els.reviewCardContent.textContent = n.content;
+  els.reviewCardContent.classList.add('hidden');
+  els.reviewNextBtn.textContent = reviewIndex === reviewQueue.length - 1 ? '완료' : '다음';
+}
+
+els.reviewBtn.addEventListener('click', () => {
+  els.reviewPlayPanel.classList.add('hidden');
+  const opening = els.reviewSetupPanel.classList.contains('hidden');
+  els.reviewSetupPanel.classList.toggle('hidden');
+  if (opening) {
+    els.reviewSetupHint.textContent = '';
+    renderReviewUnitCheckboxes();
+  }
+});
+
+els.startReviewBtn.addEventListener('click', () => {
+  const selectedIds = Array.from(els.reviewUnitCheckboxes.querySelectorAll('input:checked')).map(cb => cb.value);
+  if (selectedIds.length === 0) {
+    els.reviewSetupHint.textContent = '폴더를 하나 이상 선택해 주세요.';
+    return;
+  }
+  const idSet = new Set();
+  for (const id of selectedIds) {
+    idSet.add(id);
+    for (const d of collectDescendantUnitIds(id)) idSet.add(d);
+  }
+  const pool = notes.filter(n => idSet.has(n.unitId));
+  if (pool.length === 0) {
+    els.reviewSetupHint.textContent = '선택한 폴더에 노트가 없어요.';
+    return;
+  }
+  const count = Math.max(1, Math.min(pool.length, Math.floor(Number(els.reviewCountInput.value)) || 1));
+  reviewQueue = shuffled(pool).slice(0, count);
+  reviewIndex = 0;
+  els.reviewSetupPanel.classList.add('hidden');
+  els.reviewPlayPanel.classList.remove('hidden');
+  showReviewCard();
+});
+
+els.revealBtn.addEventListener('click', () => {
+  els.reviewCardContent.classList.toggle('hidden');
+});
+
+els.reviewCardCheck.addEventListener('click', () => {
+  toggleNoteReviewed(reviewQueue[reviewIndex].id);
+  updateReviewCheckUI();
+});
+
+els.reviewNextBtn.addEventListener('click', () => {
+  if (reviewIndex >= reviewQueue.length - 1) {
+    els.reviewPlayPanel.classList.add('hidden');
+    reviewQueue = [];
+    return;
+  }
+  reviewIndex += 1;
+  showReviewCard();
+});
+
+els.reviewEndBtn.addEventListener('click', () => {
+  els.reviewPlayPanel.classList.add('hidden');
+  reviewQueue = [];
+});
 
 els.syncBtn.addEventListener('click', () => {
   els.syncPanel.classList.toggle('hidden');

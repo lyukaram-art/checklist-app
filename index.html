@@ -193,6 +193,35 @@
     </div>
 
     <div id="notesView" class="hidden">
+      <button id="reviewBtn" type="button" class="add-btn review-toggle-btn">🔀 복습하기</button>
+
+      <section id="reviewSetupPanel" class="sync-panel hidden">
+        <p class="review-setup-title">복습할 폴더를 선택하세요</p>
+        <div id="reviewUnitCheckboxes" class="review-unit-checkboxes"></div>
+        <div class="sync-row">
+          <span>문제 수</span>
+          <input id="reviewCountInput" type="number" min="1" value="5">
+          <button id="startReviewBtn" class="small-btn">시작</button>
+        </div>
+        <p id="reviewSetupHint" class="sync-status"></p>
+      </section>
+
+      <section id="reviewPlayPanel" class="sync-panel hidden">
+        <p id="reviewProgress" class="review-progress"></p>
+        <div class="note-item review-card">
+          <div class="review-card-header">
+            <button id="reviewCardCheck" class="task-check" title="복습 완료 표시"></button>
+            <p id="reviewCardTitle" class="review-card-title"></p>
+          </div>
+          <p id="reviewCardContent" class="note-content hidden"></p>
+          <button id="revealBtn" class="small-btn">정답 보기</button>
+        </div>
+        <div class="review-nav">
+          <button id="reviewEndBtn" class="tab-btn">종료</button>
+          <button id="reviewNextBtn" class="add-btn">다음</button>
+        </div>
+      </section>
+
       <nav id="unitBreadcrumb" class="unit-breadcrumb"></nav>
 
       <div id="unitGrid" class="unit-grid"></div>
