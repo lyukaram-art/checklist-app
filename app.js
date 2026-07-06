@@ -544,6 +544,20 @@ function deleteUnit(id) {
   persist();
 }
 
+function canMoveUnitTo(sourceId, parentId) {
+  if (parentId === sourceId) return false;
+  if (parentId && collectDescendantUnitIds(sourceId).includes(parentId)) return false;
+  return true;
+}
+
+function moveUnit(sourceId, parentId) {
+  if (!canMoveUnitTo(sourceId, parentId)) return;
+  const unit = noteUnits.find(u => u.id === sourceId);
+  if (!unit) return;
+  unit.parentId = parentId ?? null;
+  persist();
+}
+
 function addNote(unitId, title, content) {
   notes.push({
     id: crypto.randomUUID(),
@@ -882,6 +896,7 @@ els.addUnitForm.addEventListener('submit', (e) => {
 });
 
 els.unitBreadcrumb.addEventListener('click', (e) => {
+  if (justDraggedUnit) return;
   const btn = e.target.closest('[data-unit-id]');
   if (!btn) return;
   selectedUnitId = btn.dataset.unitId;
@@ -889,6 +904,7 @@ els.unitBreadcrumb.addEventListener('click', (e) => {
 });
 
 els.unitGrid.addEventListener('click', (e) => {
+  if (justDraggedUnit) return;
   const editBtn = e.target.closest('.unit-card-edit');
   if (editBtn) {
     e.stopPropagation();
@@ -905,6 +921,99 @@ els.unitGrid.addEventListener('click', (e) => {
   if (!card) return;
   selectedUnitId = card.dataset.unitId;
   renderNotes();
+});
+
+// Drag a folder card onto another folder (or a breadcrumb item) to move it there.
+let unitDrag = null;
+let justDraggedUnit = false;
+
+function beginUnitDragging() {
+  if (!unitDrag) return;
+  unitDrag.dragging = true;
+  unitDrag.sourceCard.classList.add('dragging');
+}
+
+function updateUnitDragTarget(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const target = el ? el.closest('[data-unit-id]') : null;
+  if (unitDrag.overEl && unitDrag.overEl !== target) {
+    unitDrag.overEl.classList.remove('drag-over');
+    unitDrag.overEl = null;
+  }
+  if (!target) return;
+  const targetId = target.dataset.unitId === 'all' ? null : target.dataset.unitId;
+  if (canMoveUnitTo(unitDrag.unitId, targetId)) {
+    target.classList.add('drag-over');
+    unitDrag.overEl = target;
+  }
+}
+
+function teardownUnitDrag() {
+  if (!unitDrag) return;
+  if (unitDrag.longPressTimer) clearTimeout(unitDrag.longPressTimer);
+  unitDrag.sourceCard.classList.remove('dragging');
+  if (unitDrag.overEl) unitDrag.overEl.classList.remove('drag-over');
+  window.removeEventListener('pointermove', onUnitPointerMove);
+  window.removeEventListener('pointerup', onUnitPointerUp);
+  window.removeEventListener('pointercancel', onUnitPointerCancel);
+  unitDrag = null;
+}
+
+function onUnitPointerMove(e) {
+  if (!unitDrag || e.pointerId !== unitDrag.pointerId) return;
+  const dist = Math.hypot(e.clientX - unitDrag.startX, e.clientY - unitDrag.startY);
+  if (!unitDrag.dragging) {
+    if (unitDrag.pointerType === 'mouse') {
+      if (dist > 6) beginUnitDragging();
+    } else if (dist > 10) {
+      teardownUnitDrag();
+    }
+    return;
+  }
+  e.preventDefault();
+  updateUnitDragTarget(e.clientX, e.clientY);
+}
+
+function onUnitPointerUp(e) {
+  if (!unitDrag || e.pointerId !== unitDrag.pointerId) return;
+  if (unitDrag.dragging) {
+    if (unitDrag.overEl) {
+      const targetId = unitDrag.overEl.dataset.unitId === 'all' ? null : unitDrag.overEl.dataset.unitId;
+      moveUnit(unitDrag.unitId, targetId);
+    }
+    justDraggedUnit = true;
+    setTimeout(() => { justDraggedUnit = false; }, 0);
+  }
+  teardownUnitDrag();
+}
+
+function onUnitPointerCancel(e) {
+  if (!unitDrag || e.pointerId !== unitDrag.pointerId) return;
+  teardownUnitDrag();
+}
+
+els.unitGrid.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (e.target.closest('.unit-card-edit') || e.target.closest('.unit-card-delete')) return;
+  const card = e.target.closest('.unit-card');
+  if (!card) return;
+  unitDrag = {
+    unitId: card.dataset.unitId,
+    pointerId: e.pointerId,
+    pointerType: e.pointerType,
+    startX: e.clientX,
+    startY: e.clientY,
+    dragging: false,
+    sourceCard: card,
+    overEl: null,
+    longPressTimer: null,
+  };
+  window.addEventListener('pointermove', onUnitPointerMove);
+  window.addEventListener('pointerup', onUnitPointerUp);
+  window.addEventListener('pointercancel', onUnitPointerCancel);
+  if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+    unitDrag.longPressTimer = setTimeout(beginUnitDragging, 450);
+  }
 });
 
 els.addNoteForm.addEventListener('submit', (e) => {

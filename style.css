@@ -713,6 +713,22 @@ body::before {
   padding: 16px 8px 10px;
   font-size: 13px;
   color: var(--text);
+  cursor: grab;
+  user-select: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.unit-card.dragging {
+  opacity: 0.5;
+  transform: scale(0.96);
+  cursor: grabbing;
+}
+
+.unit-card.drag-over,
+.breadcrumb-item.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+  background: var(--surface-highlight);
 }
 
 .unit-card-icon {
