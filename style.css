@@ -806,6 +806,70 @@ body::before {
   resize: vertical;
 }
 
+.note-image-field {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.note-image-btn {
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.note-image-preview-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.note-image-preview {
+  display: block;
+  max-height: 64px;
+  max-width: 96px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  object-fit: cover;
+}
+
+.note-image-remove-btn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: var(--danger);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.note-thumb {
+  display: block;
+  margin-top: 10px;
+  max-width: 100%;
+  max-height: 160px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  cursor: zoom-in;
+  object-fit: contain;
+}
+
+.note-thumb.expanded {
+  max-height: none;
+  cursor: zoom-out;
+}
+
 .note-list {
   gap: 10px;
 }

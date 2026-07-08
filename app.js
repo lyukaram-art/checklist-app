@@ -58,6 +58,10 @@ const els = {
   addNoteForm: document.getElementById('addNoteForm'),
   noteTitleInput: document.getElementById('noteTitleInput'),
   noteContentInput: document.getElementById('noteContentInput'),
+  noteImageInput: document.getElementById('noteImageInput'),
+  noteImagePreviewWrap: document.getElementById('noteImagePreviewWrap'),
+  noteImagePreview: document.getElementById('noteImagePreview'),
+  noteImageRemoveBtn: document.getElementById('noteImageRemoveBtn'),
   noteAddHint: document.getElementById('noteAddHint'),
   notesList: document.getElementById('notesList'),
   reviewBtn: document.getElementById('reviewBtn'),
@@ -71,6 +75,7 @@ const els = {
   reviewCardTitle: document.getElementById('reviewCardTitle'),
   reviewCardMeta: document.getElementById('reviewCardMeta'),
   reviewCardContent: document.getElementById('reviewCardContent'),
+  reviewCardImage: document.getElementById('reviewCardImage'),
   revealBtn: document.getElementById('revealBtn'),
   reviewGradeRow: document.getElementById('reviewGradeRow'),
   gradeForgotBtn: document.getElementById('gradeForgotBtn'),
@@ -104,6 +109,7 @@ let selectedUnitId = 'all';
 let noteSearchQuery = '';
 let noteSortMode = 'recent';
 let editingNoteId = null;
+let pendingNoteImage = null;
 let reviewQueue = [];
 let reviewIndex = 0;
 let reviewSessionGrades = [];
@@ -558,18 +564,49 @@ function moveUnit(sourceId, parentId) {
   persist();
 }
 
-function addNote(unitId, title, content) {
+function addNote(unitId, title, content, image) {
   notes.push({
     id: crypto.randomUUID(),
     unitId,
     title: title.trim(),
     content: content.trim(),
+    image: image || null,
     createdAt: Date.now(),
     lastReviewedAt: null,
     reviewCount: 0,
     rememberedCount: 0,
   });
   persist();
+}
+
+function compressImageFile(file, maxDim = 700, quality = 0.6) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width >= height) {
+            height = Math.round(height * (maxDim / width));
+            width = maxDim;
+          } else {
+            width = Math.round(width * (maxDim / height));
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('이미지를 읽을 수 없어요.'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('파일을 읽을 수 없어요.'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function deleteNote(id) {
@@ -818,6 +855,54 @@ function renderNoteList(list, { showPath = false } = {}) {
       textarea.value = n.content;
       li.appendChild(textarea);
 
+      let editImage = n.image || null;
+      const imageField = document.createElement('div');
+      imageField.className = 'note-image-field';
+
+      const imageLabel = document.createElement('label');
+      imageLabel.className = 'note-image-btn';
+      imageLabel.textContent = '📷 사진 변경';
+      const imageInput = document.createElement('input');
+      imageInput.type = 'file';
+      imageInput.accept = 'image/*';
+      imageInput.className = 'hidden';
+      imageLabel.appendChild(imageInput);
+      imageField.appendChild(imageLabel);
+
+      const previewWrap = document.createElement('div');
+      previewWrap.className = 'note-image-preview-wrap' + (editImage ? '' : ' hidden');
+      const previewImg = document.createElement('img');
+      previewImg.className = 'note-image-preview';
+      previewImg.alt = '첨부 사진 미리보기';
+      if (editImage) previewImg.src = editImage;
+      const removeImgBtn = document.createElement('button');
+      removeImgBtn.type = 'button';
+      removeImgBtn.className = 'note-image-remove-btn';
+      removeImgBtn.textContent = '✕';
+      removeImgBtn.addEventListener('click', () => {
+        editImage = null;
+        previewImg.src = '';
+        previewWrap.classList.add('hidden');
+        imageInput.value = '';
+      });
+      previewWrap.appendChild(previewImg);
+      previewWrap.appendChild(removeImgBtn);
+      imageField.appendChild(previewWrap);
+
+      imageInput.addEventListener('change', async () => {
+        const file = imageInput.files[0];
+        if (!file) return;
+        try {
+          editImage = await compressImageFile(file);
+          previewImg.src = editImage;
+          previewWrap.classList.remove('hidden');
+        } catch {
+          // ignore unreadable file
+        }
+      });
+
+      li.appendChild(imageField);
+
       const actions = document.createElement('div');
       actions.className = 'note-edit-actions';
 
@@ -829,6 +914,7 @@ function renderNoteList(list, { showPath = false } = {}) {
         const trimmed = textarea.value.trim();
         if (!trimmed) return;
         n.content = trimmed;
+        n.image = editImage;
         editingNoteId = null;
         persist();
       });
@@ -851,7 +937,23 @@ function renderNoteList(list, { showPath = false } = {}) {
       body.textContent = n.content;
       li.appendChild(body);
 
-      titleWrap.addEventListener('click', () => body.classList.toggle('hidden'));
+      let thumb = null;
+      if (n.image) {
+        thumb = document.createElement('img');
+        thumb.className = 'note-thumb hidden';
+        thumb.src = n.image;
+        thumb.alt = '첨부 사진';
+        thumb.addEventListener('click', (e) => {
+          e.stopPropagation();
+          thumb.classList.toggle('expanded');
+        });
+        li.appendChild(thumb);
+      }
+
+      titleWrap.addEventListener('click', () => {
+        body.classList.toggle('hidden');
+        if (thumb) thumb.classList.toggle('hidden');
+      });
 
       const editContentBtn = document.createElement('button');
       editContentBtn.type = 'button';
@@ -1016,15 +1118,37 @@ els.unitGrid.addEventListener('pointerdown', (e) => {
   }
 });
 
+function clearPendingNoteImage() {
+  pendingNoteImage = null;
+  els.noteImageInput.value = '';
+  els.noteImagePreviewWrap.classList.add('hidden');
+  els.noteImagePreview.src = '';
+}
+
+els.noteImageInput.addEventListener('change', async () => {
+  const file = els.noteImageInput.files[0];
+  if (!file) return;
+  try {
+    pendingNoteImage = await compressImageFile(file);
+    els.noteImagePreview.src = pendingNoteImage;
+    els.noteImagePreviewWrap.classList.remove('hidden');
+  } catch {
+    clearPendingNoteImage();
+  }
+});
+
+els.noteImageRemoveBtn.addEventListener('click', () => clearPendingNoteImage());
+
 els.addNoteForm.addEventListener('submit', (e) => {
   e.preventDefault();
   if (selectedUnitId === 'all') return;
   const title = els.noteTitleInput.value.trim();
   const content = els.noteContentInput.value.trim();
   if (!title || !content) return;
-  addNote(selectedUnitId, title, content);
+  addNote(selectedUnitId, title, content, pendingNoteImage);
   els.noteTitleInput.value = '';
   els.noteContentInput.value = '';
+  clearPendingNoteImage();
   els.noteTitleInput.focus();
 });
 
@@ -1087,6 +1211,13 @@ function showReviewCard() {
   els.reviewCardMeta.textContent = noteMeta(n);
   els.reviewCardContent.textContent = n.content;
   els.reviewCardContent.classList.add('hidden');
+  if (n.image) {
+    els.reviewCardImage.src = n.image;
+    els.reviewCardImage.classList.add('hidden');
+  } else {
+    els.reviewCardImage.src = '';
+    els.reviewCardImage.classList.add('hidden');
+  }
   els.revealBtn.classList.remove('hidden');
   els.reviewGradeRow.classList.remove('hidden');
   els.reviewEndBtn.textContent = '종료';
@@ -1099,6 +1230,8 @@ function finishReview() {
   els.reviewCardTitle.textContent = `이번 복습 결과: ${total}개 중 ${rememberedCount}개 기억함`;
   els.reviewCardMeta.textContent = '';
   els.reviewCardContent.classList.add('hidden');
+  els.reviewCardImage.classList.add('hidden');
+  els.reviewCardImage.src = '';
   els.revealBtn.classList.add('hidden');
   els.reviewGradeRow.classList.add('hidden');
   els.reviewEndBtn.textContent = '닫기';
@@ -1157,6 +1290,7 @@ els.startReviewBtn.addEventListener('click', () => {
 
 els.revealBtn.addEventListener('click', () => {
   els.reviewCardContent.classList.toggle('hidden');
+  if (els.reviewCardImage.src) els.reviewCardImage.classList.toggle('hidden');
 });
 
 els.gradeForgotBtn.addEventListener('click', () => gradeCurrentCard(false));

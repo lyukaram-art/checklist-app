@@ -238,6 +238,7 @@
           <p id="reviewCardTitle" class="review-card-title"></p>
           <p id="reviewCardMeta" class="note-meta"></p>
           <p id="reviewCardContent" class="note-content hidden"></p>
+          <img id="reviewCardImage" class="note-thumb hidden" alt="첨부 사진">
           <button id="revealBtn" class="small-btn">정답 보기</button>
         </div>
         <div id="reviewGradeRow" class="review-grade-row">
@@ -269,6 +270,14 @@
       <form id="addNoteForm" class="add-form note-add-form hidden">
         <input id="noteTitleInput" type="text" placeholder="개념/문제 제목" required>
         <textarea id="noteContentInput" rows="3" placeholder="틀린 이유, 헷갈린 부분, 정리 내용" required></textarea>
+        <div class="note-image-field">
+          <label for="noteImageInput" class="note-image-btn">📷 사진 첨부 (선택)</label>
+          <input id="noteImageInput" type="file" accept="image/*" class="hidden">
+          <div id="noteImagePreviewWrap" class="note-image-preview-wrap hidden">
+            <img id="noteImagePreview" class="note-image-preview" alt="첨부 사진 미리보기">
+            <button type="button" id="noteImageRemoveBtn" class="note-image-remove-btn">✕</button>
+          </div>
+        </div>
         <button type="submit" class="add-btn">노트 추가</button>
       </form>
       <p id="noteAddHint" class="sync-status hidden"></p>
