@@ -1200,3 +1200,59 @@ body::before {
   color: var(--accent);
   border: 1px solid var(--border-game);
 }
+
+/* ---- Tag manage list (with 단원 hierarchy) ---- */
+.tag-manage-heading {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.tag-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.tag-manage-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-manage-name.tag-book {
+  color: var(--accent-blue);
+}
+
+.tag-manage-name.tag-unit {
+  color: var(--accent);
+}
+
+.tag-parent-select {
+  max-width: 40%;
+  padding: 4px 6px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 11px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.tag-manage-btn {
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}

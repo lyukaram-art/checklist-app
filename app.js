@@ -530,12 +530,65 @@ function findTag(id) {
   return (noteTags || []).find(t => t.id === id) || null;
 }
 
+// 단원(unit) 계층 -------------------------------------------------
+// A unit tag's parentId points to another unit tag (null/dangling = top level).
+function unitParentId(tag) {
+  if (!tag || tag.category !== 'unit' || !tag.parentId) return null;
+  const p = findTag(tag.parentId);
+  return p && p.category === 'unit' ? p.id : null;
+}
+
+function unitChildren(parentId) {
+  return tagsInCategory('unit').filter(t => unitParentId(t) === parentId);
+}
+
+// Preorder list of every unit tag as { tag, depth }.
+function unitTreeOrder() {
+  const out = [];
+  const walk = (parentId, depth) => {
+    if (depth > 100) return;
+    for (const t of unitChildren(parentId)) {
+      out.push({ tag: t, depth });
+      walk(t.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
+function unitDescendantIds(id) {
+  const result = [];
+  for (const child of unitChildren(id)) {
+    result.push(child.id, ...unitDescendantIds(child.id));
+  }
+  return result;
+}
+
+function unitSubtreeIds(id) {
+  return [id, ...unitDescendantIds(id)];
+}
+
+// Ordered [{ tag, depth }] for a category: units as a tree, books flat.
+function orderedTagsInCategory(category) {
+  if (category === 'unit') return unitTreeOrder();
+  return tagsInCategory(category).map(tag => ({ tag, depth: 0 }));
+}
+
+// Tag ids a selected tag should match: a unit also matches its descendants.
+function tagEffectiveIds(tag) {
+  return tag.category === 'unit' ? unitSubtreeIds(tag.id) : [tag.id];
+}
+
 function noteTagObjects(n) {
   return (n.tagIds || []).map(findTag).filter(Boolean);
 }
 
+// Subtree-aware count: a 순환기 parent also counts notes tagged with its children.
 function countNotesWithTag(tagId) {
-  return notes.filter(n => (n.tagIds || []).includes(tagId)).length;
+  const tag = findTag(tagId);
+  if (!tag) return 0;
+  const ids = new Set(tagEffectiveIds(tag));
+  return notes.filter(n => (n.tagIds || []).some(t => ids.has(t))).length;
 }
 
 function addTag(name, category) {
@@ -545,7 +598,7 @@ function addTag(name, category) {
     t => t.category === category && t.name.toLowerCase() === trimmed.toLowerCase()
   );
   if (existing) return existing;
-  const tag = { id: crypto.randomUUID(), name: trimmed, category };
+  const tag = { id: crypto.randomUUID(), name: trimmed, category, parentId: null };
   if (!noteTags) noteTags = [];
   noteTags.push(tag);
   persist();
@@ -563,15 +616,34 @@ function renameTag(id) {
   persist();
 }
 
+// Move a unit tag under another unit (or null for top level). Blocks cycles.
+function setUnitParent(id, parentId) {
+  const tag = findTag(id);
+  if (!tag || tag.category !== 'unit') return;
+  if (parentId === id) return;
+  if (parentId && unitDescendantIds(id).includes(parentId)) return;
+  if (parentId) {
+    const p = findTag(parentId);
+    if (!p || p.category !== 'unit') return;
+  }
+  tag.parentId = parentId || null;
+  persist();
+}
+
 function deleteTag(id) {
   const tag = findTag(id);
   if (!tag) return;
-  const used = countNotesWithTag(id);
-  const msg = used > 0
-    ? `'${tag.name}' 태그를 삭제할까요? ${used}개 노트에서 이 태그가 제거돼요. (노트는 삭제되지 않아요)`
-    : `'${tag.name}' 태그를 삭제할까요?`;
+  const directUsed = notes.filter(n => (n.tagIds || []).includes(id)).length;
+  const hasChildren = tag.category === 'unit' && unitChildren(id).length > 0;
+  let msg = `'${tag.name}' 태그를 삭제할까요?`;
+  if (directUsed > 0) msg += ` ${directUsed}개 노트에서 이 태그가 제거돼요. (노트는 삭제되지 않아요)`;
+  if (hasChildren) msg += ' 하위 단원은 상위 단계로 올라가요.';
   if (!confirm(msg)) return;
+  const promoteTo = tag.parentId || null;
   noteTags = noteTags.filter(t => t.id !== id);
+  for (const t of noteTags) {
+    if (t.category === 'unit' && t.parentId === id) t.parentId = promoteTo;
+  }
   for (const n of notes) {
     if (Array.isArray(n.tagIds)) n.tagIds = n.tagIds.filter(tid => tid !== id);
   }
@@ -583,7 +655,18 @@ function deleteTag(id) {
 function toggleTagCategory(id) {
   const tag = findTag(id);
   if (!tag) return;
-  tag.category = tag.category === 'book' ? 'unit' : 'book';
+  if (tag.category === 'unit') {
+    // Becoming a book: detach from the hierarchy and promote its children.
+    const promoteTo = tag.parentId || null;
+    for (const t of noteTags) {
+      if (t.category === 'unit' && t.parentId === id) t.parentId = promoteTo;
+    }
+    tag.parentId = null;
+    tag.category = 'book';
+  } else {
+    tag.category = 'unit';
+    tag.parentId = null;
+  }
   persist();
 }
 
@@ -743,7 +826,7 @@ function noteMatchesTagFilter(n) {
   const noteIds = new Set(n.tagIds || []);
   for (const category of TAG_CATEGORIES) {
     const selected = tagsInCategory(category).filter(t => activeFilterTagIds.has(t.id));
-    if (selected.length && !selected.some(t => noteIds.has(t.id))) return false;
+    if (selected.length && !selected.some(t => tagEffectiveIds(t).some(id => noteIds.has(id)))) return false;
   }
   return true;
 }
@@ -766,62 +849,13 @@ function renderTagFilterBar() {
   }
   els.tagFilterBar.classList.remove('hidden');
 
-  for (const category of TAG_CATEGORIES) {
-    const tags = tagsInCategory(category);
-    if (tags.length === 0) continue;
-
-    const row = document.createElement('div');
-    row.className = 'tag-filter-row';
-
-    const label = document.createElement('span');
-    label.className = 'tag-filter-label';
-    label.textContent = TAG_CATEGORY_META[category].label;
-    row.appendChild(label);
-
-    for (const tag of tags) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'tag-chip tag-' + category
-        + (activeFilterTagIds.has(tag.id) ? ' active' : '')
-        + (tagManageMode ? ' manage' : '');
-      chip.dataset.tagId = tag.id;
-
-      const name = document.createElement('span');
-      name.className = 'tag-chip-name';
-      name.textContent = `${tag.name} (${countNotesWithTag(tag.id)})`;
-      chip.appendChild(name);
-
-      if (tagManageMode) {
-        const swap = document.createElement('span');
-        swap.className = 'tag-chip-swap';
-        swap.dataset.action = 'swap';
-        swap.title = '책↔단원 전환';
-        swap.textContent = '⇄';
-        chip.appendChild(swap);
-
-        const edit = document.createElement('span');
-        edit.className = 'tag-chip-edit';
-        edit.dataset.action = 'rename';
-        edit.textContent = '✎';
-        chip.appendChild(edit);
-
-        const del = document.createElement('span');
-        del.className = 'tag-chip-delete';
-        del.dataset.action = 'delete';
-        del.textContent = '✕';
-        chip.appendChild(del);
-      }
-
-      row.appendChild(chip);
-    }
-
-    els.tagFilterBar.appendChild(row);
-  }
+  if (tagManageMode) renderTagManageList();
+  else renderTagFilterChips();
 
   const controls = document.createElement('div');
   controls.className = 'tag-filter-controls';
 
-  if (activeFilterTagIds.size > 0) {
+  if (!tagManageMode && activeFilterTagIds.size > 0) {
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'tag-filter-clear';
@@ -840,14 +874,117 @@ function renderTagFilterBar() {
   els.tagFilterBar.appendChild(controls);
 }
 
+function renderTagFilterChips() {
+  for (const category of TAG_CATEGORIES) {
+    const ordered = orderedTagsInCategory(category);
+    if (ordered.length === 0) continue;
+
+    const row = document.createElement('div');
+    row.className = 'tag-filter-row';
+
+    const label = document.createElement('span');
+    label.className = 'tag-filter-label';
+    label.textContent = TAG_CATEGORY_META[category].label;
+    row.appendChild(label);
+
+    for (const { tag, depth } of ordered) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'tag-chip tag-' + category + (activeFilterTagIds.has(tag.id) ? ' active' : '');
+      chip.dataset.tagId = tag.id;
+      if (depth) chip.style.marginLeft = (depth * 14) + 'px';
+
+      const name = document.createElement('span');
+      name.className = 'tag-chip-name';
+      name.textContent = `${tag.name} (${countNotesWithTag(tag.id)})`;
+      chip.appendChild(name);
+
+      row.appendChild(chip);
+    }
+
+    els.tagFilterBar.appendChild(row);
+  }
+}
+
+function renderTagManageList() {
+  for (const category of TAG_CATEGORIES) {
+    const ordered = orderedTagsInCategory(category);
+    if (ordered.length === 0) continue;
+
+    const heading = document.createElement('p');
+    heading.className = 'tag-manage-heading';
+    heading.textContent = TAG_CATEGORY_META[category].label;
+    els.tagFilterBar.appendChild(heading);
+
+    for (const { tag, depth } of ordered) {
+      const row = document.createElement('div');
+      row.className = 'tag-manage-row';
+      if (depth) row.style.marginLeft = (depth * 16) + 'px';
+
+      const name = document.createElement('span');
+      name.className = 'tag-manage-name tag-' + category;
+      name.textContent = tag.name;
+      row.appendChild(name);
+
+      if (category === 'unit') {
+        const sel = document.createElement('select');
+        sel.className = 'tag-parent-select';
+        sel.dataset.tagId = tag.id;
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = '상위: 없음';
+        sel.appendChild(none);
+        const banned = new Set([tag.id, ...unitDescendantIds(tag.id)]);
+        for (const { tag: cand, depth: d } of unitTreeOrder()) {
+          if (banned.has(cand.id)) continue;
+          const opt = document.createElement('option');
+          opt.value = cand.id;
+          opt.textContent = '상위: ' + '　'.repeat(d) + cand.name;
+          if (unitParentId(tag) === cand.id) opt.selected = true;
+          sel.appendChild(opt);
+        }
+        row.appendChild(sel);
+      }
+
+      const swap = document.createElement('button');
+      swap.type = 'button';
+      swap.className = 'tag-manage-btn';
+      swap.dataset.action = 'swap';
+      swap.dataset.tagId = tag.id;
+      swap.title = '책↔단원 전환';
+      swap.textContent = '⇄';
+      row.appendChild(swap);
+
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'tag-manage-btn';
+      edit.dataset.action = 'rename';
+      edit.dataset.tagId = tag.id;
+      edit.textContent = '✎';
+      row.appendChild(edit);
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'tag-manage-btn';
+      del.dataset.action = 'delete';
+      del.dataset.tagId = tag.id;
+      del.textContent = '✕';
+      row.appendChild(del);
+
+      els.tagFilterBar.appendChild(row);
+    }
+  }
+}
+
 function renderTagPicker(container, category, selectedSet) {
   container.innerHTML = '';
-  for (const tag of tagsInCategory(category)) {
+  for (const { tag, depth } of orderedTagsInCategory(category)) {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'tag-chip tag-' + category + (selectedSet.has(tag.id) ? ' active' : '');
     chip.dataset.tagId = tag.id;
     chip.textContent = tag.name;
+    if (depth) chip.style.marginLeft = (depth * 14) + 'px';
     chip.addEventListener('click', () => {
       if (selectedSet.has(tag.id)) selectedSet.delete(tag.id);
       else selectedSet.add(tag.id);
@@ -1102,18 +1239,25 @@ els.tagFilterBar.addEventListener('click', (e) => {
     renderTagFilterBar();
     return;
   }
+  if (action === 'rename' || action === 'delete' || action === 'swap') {
+    const tagId = actionEl.dataset.tagId;
+    if (action === 'rename') renameTag(tagId);
+    else if (action === 'delete') deleteTag(tagId);
+    else toggleTagCategory(tagId);
+    return;
+  }
   const chip = e.target.closest('.tag-chip');
   if (!chip) return;
   const tagId = chip.dataset.tagId;
-  if (tagManageMode) {
-    if (action === 'rename') renameTag(tagId);
-    else if (action === 'delete') deleteTag(tagId);
-    else if (action === 'swap') toggleTagCategory(tagId);
-    return;
-  }
   if (activeFilterTagIds.has(tagId)) activeFilterTagIds.delete(tagId);
   else activeFilterTagIds.add(tagId);
   renderNotes();
+});
+
+els.tagFilterBar.addEventListener('change', (e) => {
+  const sel = e.target.closest('.tag-parent-select');
+  if (!sel) return;
+  setUnitParent(sel.dataset.tagId, sel.value || null);
 });
 
 function clearPendingNoteImage() {
@@ -1172,17 +1316,18 @@ function renderReviewTagCheckboxes() {
     return;
   }
   for (const category of TAG_CATEGORIES) {
-    const tags = tagsInCategory(category);
-    if (tags.length === 0) continue;
+    const ordered = orderedTagsInCategory(category);
+    if (ordered.length === 0) continue;
 
     const heading = document.createElement('p');
     heading.className = 'review-tag-heading';
     heading.textContent = TAG_CATEGORY_META[category].label;
     els.reviewTagCheckboxes.appendChild(heading);
 
-    for (const tag of tags) {
+    for (const { tag, depth } of ordered) {
       const label = document.createElement('label');
       label.className = 'review-unit-row';
+      if (depth) label.style.paddingLeft = (depth * 18) + 'px';
 
       const cb = document.createElement('input');
       cb.type = 'checkbox';
@@ -1259,8 +1404,13 @@ els.reviewBtn.addEventListener('click', () => {
 
 els.startReviewBtn.addEventListener('click', () => {
   const selectedIds = Array.from(els.reviewTagCheckboxes.querySelectorAll('input:checked')).map(cb => cb.value);
-  const idSet = new Set(selectedIds);
-  const pool = idSet.size === 0
+  const idSet = new Set();
+  for (const id of selectedIds) {
+    const tag = findTag(id);
+    if (tag) for (const eid of tagEffectiveIds(tag)) idSet.add(eid);
+    else idSet.add(id);
+  }
+  const pool = selectedIds.length === 0
     ? notes.slice()
     : notes.filter(n => (n.tagIds || []).some(tid => idSet.has(tid)));
   if (pool.length === 0) {
