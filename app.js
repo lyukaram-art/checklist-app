@@ -568,6 +568,23 @@ function unitSubtreeIds(id) {
   return [id, ...unitDescendantIds(id)];
 }
 
+// Depth of a unit tag in the hierarchy (top-level = 0).
+function unitDepth(tag) {
+  let depth = 0;
+  let cur = tag;
+  let guard = 0;
+  while (cur && unitParentId(cur) && guard++ < 100) {
+    cur = findTag(unitParentId(cur));
+    depth++;
+  }
+  return depth;
+}
+
+// Display order for a note's tags: 책 → 큰 단원(상위) → 작은 단원(하위).
+function noteTagSortKey(tag) {
+  return tag.category === 'book' ? 0 : 1 + unitDepth(tag);
+}
+
 // Ordered [{ tag, depth }] for a category: units as a tree, books flat.
 function orderedTagsInCategory(category) {
   if (category === 'unit') return unitTreeOrder();
@@ -580,7 +597,10 @@ function tagEffectiveIds(tag) {
 }
 
 function noteTagObjects(n) {
-  return (n.tagIds || []).map(findTag).filter(Boolean);
+  return (n.tagIds || [])
+    .map(findTag)
+    .filter(Boolean)
+    .sort((a, b) => noteTagSortKey(a) - noteTagSortKey(b));
 }
 
 // Subtree-aware count: a 순환기 parent also counts notes tagged with its children.
