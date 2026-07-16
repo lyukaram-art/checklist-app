@@ -222,8 +222,8 @@
       <button id="reviewBtn" type="button" class="add-btn review-toggle-btn">🔀 복습하기</button>
 
       <section id="reviewSetupPanel" class="sync-panel hidden">
-        <p class="review-setup-title">복습할 폴더를 선택하세요</p>
-        <div id="reviewUnitCheckboxes" class="review-unit-checkboxes"></div>
+        <p class="review-setup-title">복습할 태그를 선택하세요 (안 고르면 전체)</p>
+        <div id="reviewTagCheckboxes" class="review-unit-checkboxes"></div>
         <div class="sync-row">
           <span>문제 수</span>
           <input id="reviewCountInput" type="number" min="1" value="5">
@@ -248,17 +248,10 @@
         <button id="reviewEndBtn" class="tab-btn review-end-btn">종료</button>
       </section>
 
-      <nav id="unitBreadcrumb" class="unit-breadcrumb"></nav>
-
-      <div id="unitGrid" class="unit-grid"></div>
-
-      <form id="addUnitForm" class="add-form">
-        <input id="unitInput" type="text" placeholder="새 폴더 이름" required>
-        <button type="submit" class="add-btn">폴더 추가</button>
-      </form>
+      <div id="tagFilterBar" class="tag-filter-bar hidden"></div>
 
       <div class="note-toolbar">
-        <input id="noteSearchInput" type="text" class="note-search" placeholder="🔍 전체 폴더에서 검색">
+        <input id="noteSearchInput" type="text" class="note-search" placeholder="🔍 노트 검색">
         <select id="noteSortSelect" class="note-sort-select">
           <option value="recent">최신순</option>
           <option value="rateAsc">기억률 낮은순</option>
@@ -267,9 +260,19 @@
         </select>
       </div>
 
-      <form id="addNoteForm" class="add-form note-add-form hidden">
+      <form id="addNoteForm" class="add-form note-add-form">
         <input id="noteTitleInput" type="text" placeholder="개념/문제 제목" required>
         <textarea id="noteContentInput" rows="3" placeholder="틀린 이유, 헷갈린 부분, 정리 내용" required></textarea>
+        <div class="note-tag-pickers">
+          <div class="note-tag-group">
+            <span class="note-tag-group-label">📖 책</span>
+            <div id="bookTagPicker" class="tag-picker"></div>
+          </div>
+          <div class="note-tag-group">
+            <span class="note-tag-group-label">🫀 단원</span>
+            <div id="unitTagPicker" class="tag-picker"></div>
+          </div>
+        </div>
         <div class="note-image-field">
           <label for="noteImageInput" class="note-image-btn">📷 사진 첨부 (선택)</label>
           <input id="noteImageInput" type="file" accept="image/*" class="hidden">

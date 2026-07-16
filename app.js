@@ -4,6 +4,7 @@ const LOCAL_TASKS_KEY = 'checklist_tasks';
 const LOCAL_HISTORY_KEY = 'checklist_history';
 const LOCAL_ROOM_KEY = 'checklist_room_code';
 const LOCAL_NOTE_UNITS_KEY = 'checklist_note_units';
+const LOCAL_NOTE_TAGS_KEY = 'checklist_note_tags';
 const LOCAL_NOTES_KEY = 'checklist_notes';
 const LOCAL_THEME_KEY = 'checklist_theme';
 
@@ -49,10 +50,9 @@ const els = {
   studyLevelDays: document.getElementById('studyLevelDays'),
   notesTabBtn: document.getElementById('notesTabBtn'),
   notesView: document.getElementById('notesView'),
-  unitBreadcrumb: document.getElementById('unitBreadcrumb'),
-  unitGrid: document.getElementById('unitGrid'),
-  addUnitForm: document.getElementById('addUnitForm'),
-  unitInput: document.getElementById('unitInput'),
+  tagFilterBar: document.getElementById('tagFilterBar'),
+  bookTagPicker: document.getElementById('bookTagPicker'),
+  unitTagPicker: document.getElementById('unitTagPicker'),
   noteSearchInput: document.getElementById('noteSearchInput'),
   noteSortSelect: document.getElementById('noteSortSelect'),
   addNoteForm: document.getElementById('addNoteForm'),
@@ -66,7 +66,7 @@ const els = {
   notesList: document.getElementById('notesList'),
   reviewBtn: document.getElementById('reviewBtn'),
   reviewSetupPanel: document.getElementById('reviewSetupPanel'),
-  reviewUnitCheckboxes: document.getElementById('reviewUnitCheckboxes'),
+  reviewTagCheckboxes: document.getElementById('reviewTagCheckboxes'),
   reviewCountInput: document.getElementById('reviewCountInput'),
   startReviewBtn: document.getElementById('startReviewBtn'),
   reviewSetupHint: document.getElementById('reviewSetupHint'),
@@ -102,14 +102,18 @@ let tasks = loadLocalTasks();
 let history = loadLocalHistory();
 let noteUnits = loadLocalNoteUnits();
 let notes = loadLocalNotes();
+let noteTags = loadLocalNoteTags();
+if (noteTags === null) migrateFoldersToTags();
 let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let selectedDayKey = null;
 let categoryFilter = 'all';
-let selectedUnitId = 'all';
 let noteSearchQuery = '';
 let noteSortMode = 'recent';
 let editingNoteId = null;
 let pendingNoteImage = null;
+const activeFilterTagIds = new Set();
+const pendingNoteTagIds = new Set();
+let tagManageMode = false;
 let reviewQueue = [];
 let reviewIndex = 0;
 let reviewSessionGrades = [];
@@ -201,6 +205,15 @@ function loadLocalNoteUnits() {
   }
 }
 
+function loadLocalNoteTags() {
+  try {
+    const raw = localStorage.getItem(LOCAL_NOTE_TAGS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 function loadLocalNotes() {
   try {
     const raw = localStorage.getItem(LOCAL_NOTES_KEY);
@@ -255,13 +268,14 @@ function saveLocal() {
   localStorage.setItem(LOCAL_TASKS_KEY, JSON.stringify(tasks));
   localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(history));
   localStorage.setItem(LOCAL_NOTE_UNITS_KEY, JSON.stringify(noteUnits));
+  localStorage.setItem(LOCAL_NOTE_TAGS_KEY, JSON.stringify(noteTags || []));
   localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify(notes));
 }
 
 async function saveRemote() {
   if (!firebaseReady || !docRef) return;
   suppressNextWrite = true;
-  await fsMod.setDoc(docRef, { items: tasks, history, noteUnits, notes, updatedAt: Date.now() }, { merge: true });
+  await fsMod.setDoc(docRef, { items: tasks, history, noteUnits, noteTags: noteTags || [], notes, updatedAt: Date.now() }, { merge: true });
 }
 
 function persist() {
@@ -482,95 +496,104 @@ els.addForm.addEventListener('submit', (e) => {
   els.taskInput.focus();
 });
 
-function parentOf(unit) {
-  return unit.parentId ?? null;
-}
-
-function currentParentId() {
-  return selectedUnitId === 'all' ? null : selectedUnitId;
-}
-
-function childUnits(parentId) {
-  return noteUnits.filter(u => parentOf(u) === parentId);
-}
-
-function collectDescendantUnitIds(id) {
-  const direct = childUnits(id).map(u => u.id);
-  return direct.reduce((acc, cid) => acc.concat(cid, collectDescendantUnitIds(cid)), []);
-}
-
-function unitPath(id) {
-  const path = [];
-  let cur = noteUnits.find(u => u.id === id);
-  while (cur) {
-    path.unshift(cur);
-    cur = parentOf(cur) ? noteUnits.find(u => u.id === parentOf(cur)) : null;
+// One-time migration: turn existing folders into 단원(unit) tags so no note is orphaned.
+// Runs only when noteTags has never been stored (loadLocalNoteTags returned null).
+// Reuses folder ids as tag ids and keeps noteUnits / note.unitId untouched as a safety net.
+function migrateFoldersToTags() {
+  const tags = (noteUnits || []).map(u => ({ id: u.id, name: u.name, category: 'unit' }));
+  const validIds = new Set(tags.map(t => t.id));
+  const pathIds = (unitId) => {
+    const ids = [];
+    let cur = (noteUnits || []).find(u => u.id === unitId);
+    let guard = 0;
+    while (cur && guard++ < 100) {
+      ids.push(cur.id);
+      cur = cur.parentId ? (noteUnits || []).find(u => u.id === cur.parentId) : null;
+    }
+    return ids;
+  };
+  for (const n of notes) {
+    if (!Array.isArray(n.tagIds)) {
+      n.tagIds = n.unitId ? pathIds(n.unitId).filter(id => validIds.has(id)) : [];
+    }
   }
-  return path;
+  noteTags = tags;
 }
 
-function notePathLabel(unitId) {
-  const path = unitPath(unitId);
-  return path.length ? path.map(u => u.name).join(' › ') : '(삭제된 폴더)';
+const TAG_CATEGORIES = ['book', 'unit'];
+
+function tagsInCategory(category) {
+  return (noteTags || []).filter(t => t.category === category);
 }
 
-function countNotesInSubtree(id) {
-  const ids = new Set([id, ...collectDescendantUnitIds(id)]);
-  return notes.filter(n => ids.has(n.unitId)).length;
+function findTag(id) {
+  return (noteTags || []).find(t => t.id === id) || null;
 }
 
-function addUnit(name) {
+function noteTagObjects(n) {
+  return (n.tagIds || []).map(findTag).filter(Boolean);
+}
+
+function countNotesWithTag(tagId) {
+  return notes.filter(n => (n.tagIds || []).includes(tagId)).length;
+}
+
+function addTag(name, category) {
   const trimmed = name.trim();
-  if (!trimmed) return;
-  noteUnits.push({ id: crypto.randomUUID(), name: trimmed, parentId: currentParentId() });
+  if (!trimmed) return null;
+  const existing = (noteTags || []).find(
+    t => t.category === category && t.name.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (existing) return existing;
+  const tag = { id: crypto.randomUUID(), name: trimmed, category };
+  if (!noteTags) noteTags = [];
+  noteTags.push(tag);
   persist();
+  return tag;
 }
 
-function renameUnit(id) {
-  const unit = noteUnits.find(u => u.id === id);
-  if (!unit) return;
-  const name = prompt('새 폴더 이름', unit.name);
+function renameTag(id) {
+  const tag = findTag(id);
+  if (!tag) return;
+  const name = prompt('새 태그 이름', tag.name);
   if (name === null) return;
   const trimmed = name.trim();
   if (!trimmed) return;
-  unit.name = trimmed;
+  tag.name = trimmed;
   persist();
 }
 
-function deleteUnit(id) {
-  if (!confirm('이 폴더와 하위 폴더, 안의 노트를 모두 삭제할까요?')) return;
-  const target = noteUnits.find(u => u.id === id);
-  const fallbackParentId = target ? parentOf(target) : null;
-  const idsToRemove = new Set([id, ...collectDescendantUnitIds(id)]);
-  noteUnits = noteUnits.filter(u => !idsToRemove.has(u.id));
-  notes = notes.filter(n => !idsToRemove.has(n.unitId));
-  if (idsToRemove.has(selectedUnitId)) {
-    selectedUnitId = fallbackParentId ?? 'all';
+function deleteTag(id) {
+  const tag = findTag(id);
+  if (!tag) return;
+  const used = countNotesWithTag(id);
+  const msg = used > 0
+    ? `'${tag.name}' 태그를 삭제할까요? ${used}개 노트에서 이 태그가 제거돼요. (노트는 삭제되지 않아요)`
+    : `'${tag.name}' 태그를 삭제할까요?`;
+  if (!confirm(msg)) return;
+  noteTags = noteTags.filter(t => t.id !== id);
+  for (const n of notes) {
+    if (Array.isArray(n.tagIds)) n.tagIds = n.tagIds.filter(tid => tid !== id);
   }
+  activeFilterTagIds.delete(id);
+  pendingNoteTagIds.delete(id);
   persist();
 }
 
-function canMoveUnitTo(sourceId, parentId) {
-  if (parentId === sourceId) return false;
-  if (parentId && collectDescendantUnitIds(sourceId).includes(parentId)) return false;
-  return true;
-}
-
-function moveUnit(sourceId, parentId) {
-  if (!canMoveUnitTo(sourceId, parentId)) return;
-  const unit = noteUnits.find(u => u.id === sourceId);
-  if (!unit) return;
-  unit.parentId = parentId ?? null;
+function toggleTagCategory(id) {
+  const tag = findTag(id);
+  if (!tag) return;
+  tag.category = tag.category === 'book' ? 'unit' : 'book';
   persist();
 }
 
-function addNote(unitId, title, content, image) {
+function addNote(title, content, image, tagIds) {
   notes.push({
     id: crypto.randomUUID(),
-    unitId,
     title: title.trim(),
     content: content.trim(),
     image: image || null,
+    tagIds: Array.isArray(tagIds) ? tagIds.slice() : [],
     createdAt: Date.now(),
     lastReviewedAt: null,
     reviewCount: 0,
@@ -712,82 +735,144 @@ function noteMatchesSearch(n) {
   return n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q);
 }
 
-function notesInCurrentFolder() {
-  if (selectedUnitId === 'all') return [];
-  return notes.filter(n => n.unitId === selectedUnitId);
-}
-
-function searchAllNotes() {
-  return notes.filter(noteMatchesSearch);
-}
-
-function renderBreadcrumb() {
-  els.unitBreadcrumb.innerHTML = '';
-
-  const rootBtn = document.createElement('button');
-  rootBtn.className = 'breadcrumb-item' + (selectedUnitId === 'all' ? ' active' : '');
-  rootBtn.textContent = '전체';
-  rootBtn.dataset.unitId = 'all';
-  els.unitBreadcrumb.appendChild(rootBtn);
-
-  if (selectedUnitId === 'all') return;
-
-  for (const u of unitPath(selectedUnitId)) {
-    const sep = document.createElement('span');
-    sep.className = 'breadcrumb-sep';
-    sep.textContent = '›';
-    els.unitBreadcrumb.appendChild(sep);
-
-    const btn = document.createElement('button');
-    btn.className = 'breadcrumb-item' + (u.id === selectedUnitId ? ' active' : '');
-    btn.textContent = u.name;
-    btn.dataset.unitId = u.id;
-    els.unitBreadcrumb.appendChild(btn);
+// A note matches the tag filter when, for every category that has active tags,
+// the note carries at least one of that category's selected tags (AND across
+// categories, OR within a category).
+function noteMatchesTagFilter(n) {
+  if (activeFilterTagIds.size === 0) return true;
+  const noteIds = new Set(n.tagIds || []);
+  for (const category of TAG_CATEGORIES) {
+    const selected = tagsInCategory(category).filter(t => activeFilterTagIds.has(t.id));
+    if (selected.length && !selected.some(t => noteIds.has(t.id))) return false;
   }
+  return true;
 }
 
-function renderUnitGrid() {
-  const children = childUnits(currentParentId());
-  els.unitGrid.innerHTML = '';
-  for (const u of children) {
-    const card = document.createElement('button');
-    card.type = 'button';
-    card.className = 'unit-card';
-    card.dataset.unitId = u.id;
+function visibleNotes() {
+  return notes.filter(n => noteMatchesSearch(n) && noteMatchesTagFilter(n));
+}
 
-    const icon = document.createElement('span');
-    icon.className = 'unit-card-icon';
-    icon.textContent = '📁';
-    card.appendChild(icon);
+const TAG_CATEGORY_META = {
+  book: { label: '📖 책', addLabel: '＋ 새 책' },
+  unit: { label: '🫀 단원', addLabel: '＋ 새 단원' },
+};
 
-    const name = document.createElement('span');
-    name.className = 'unit-card-name';
-    name.textContent = u.name;
-    card.appendChild(name);
+function renderTagFilterBar() {
+  els.tagFilterBar.innerHTML = '';
+  const hasTags = (noteTags || []).length > 0;
+  if (!hasTags) {
+    els.tagFilterBar.classList.add('hidden');
+    return;
+  }
+  els.tagFilterBar.classList.remove('hidden');
 
-    const count = countNotesInSubtree(u.id);
-    if (count > 0) {
-      const badge = document.createElement('span');
-      badge.className = 'unit-card-count';
-      badge.textContent = `${count}개`;
-      card.appendChild(badge);
+  for (const category of TAG_CATEGORIES) {
+    const tags = tagsInCategory(category);
+    if (tags.length === 0) continue;
+
+    const row = document.createElement('div');
+    row.className = 'tag-filter-row';
+
+    const label = document.createElement('span');
+    label.className = 'tag-filter-label';
+    label.textContent = TAG_CATEGORY_META[category].label;
+    row.appendChild(label);
+
+    for (const tag of tags) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'tag-chip tag-' + category
+        + (activeFilterTagIds.has(tag.id) ? ' active' : '')
+        + (tagManageMode ? ' manage' : '');
+      chip.dataset.tagId = tag.id;
+
+      const name = document.createElement('span');
+      name.className = 'tag-chip-name';
+      name.textContent = `${tag.name} (${countNotesWithTag(tag.id)})`;
+      chip.appendChild(name);
+
+      if (tagManageMode) {
+        const swap = document.createElement('span');
+        swap.className = 'tag-chip-swap';
+        swap.dataset.action = 'swap';
+        swap.title = '책↔단원 전환';
+        swap.textContent = '⇄';
+        chip.appendChild(swap);
+
+        const edit = document.createElement('span');
+        edit.className = 'tag-chip-edit';
+        edit.dataset.action = 'rename';
+        edit.textContent = '✎';
+        chip.appendChild(edit);
+
+        const del = document.createElement('span');
+        del.className = 'tag-chip-delete';
+        del.dataset.action = 'delete';
+        del.textContent = '✕';
+        chip.appendChild(del);
+      }
+
+      row.appendChild(chip);
     }
 
-    const edit = document.createElement('span');
-    edit.className = 'unit-card-edit';
-    edit.textContent = '✎';
-    card.appendChild(edit);
-
-    const del = document.createElement('span');
-    del.className = 'unit-card-delete';
-    del.textContent = '✕';
-    card.appendChild(del);
-
-    els.unitGrid.appendChild(card);
+    els.tagFilterBar.appendChild(row);
   }
+
+  const controls = document.createElement('div');
+  controls.className = 'tag-filter-controls';
+
+  if (activeFilterTagIds.size > 0) {
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'tag-filter-clear';
+    clear.dataset.action = 'clear';
+    clear.textContent = '필터 해제';
+    controls.appendChild(clear);
+  }
+
+  const manage = document.createElement('button');
+  manage.type = 'button';
+  manage.className = 'tag-filter-manage' + (tagManageMode ? ' active' : '');
+  manage.dataset.action = 'manage';
+  manage.textContent = tagManageMode ? '완료' : '태그 관리';
+  controls.appendChild(manage);
+
+  els.tagFilterBar.appendChild(controls);
 }
 
-function renderNoteList(list, { showPath = false } = {}) {
+function renderTagPicker(container, category, selectedSet) {
+  container.innerHTML = '';
+  for (const tag of tagsInCategory(category)) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'tag-chip tag-' + category + (selectedSet.has(tag.id) ? ' active' : '');
+    chip.dataset.tagId = tag.id;
+    chip.textContent = tag.name;
+    chip.addEventListener('click', () => {
+      if (selectedSet.has(tag.id)) selectedSet.delete(tag.id);
+      else selectedSet.add(tag.id);
+      renderTagPicker(container, category, selectedSet);
+    });
+    container.appendChild(chip);
+  }
+
+  const addChip = document.createElement('button');
+  addChip.type = 'button';
+  addChip.className = 'tag-chip tag-add';
+  addChip.textContent = TAG_CATEGORY_META[category].addLabel;
+  addChip.addEventListener('click', () => {
+    const name = prompt(TAG_CATEGORY_META[category].addLabel.replace('＋ ', '') + ' 이름');
+    if (name === null) return;
+    const tag = addTag(name, category);
+    if (tag) {
+      selectedSet.add(tag.id);
+      renderTagPicker(container, category, selectedSet);
+    }
+  });
+  container.appendChild(addChip);
+}
+
+function renderNoteList(list) {
   els.notesList.innerHTML = '';
   if (list.length === 0) {
     const li = document.createElement('li');
@@ -815,12 +900,6 @@ function renderNoteList(list, { showPath = false } = {}) {
     title.className = 'note-title';
     title.textContent = n.title;
     titleWrap.appendChild(title);
-    if (showPath) {
-      const badge = document.createElement('span');
-      badge.className = 'date-badge';
-      badge.textContent = notePathLabel(n.unitId);
-      titleWrap.appendChild(badge);
-    }
     header.appendChild(titleWrap);
 
     const edit = document.createElement('button');
@@ -848,12 +927,43 @@ function renderNoteList(list, { showPath = false } = {}) {
     meta.appendChild(rateSpan);
     li.appendChild(meta);
 
+    const tagObjs = noteTagObjects(n);
+    if (tagObjs.length && n.id !== editingNoteId) {
+      const tagRow = document.createElement('div');
+      tagRow.className = 'note-tag-row';
+      for (const tag of tagObjs) {
+        const chip = document.createElement('span');
+        chip.className = 'note-tag tag-' + tag.category;
+        chip.textContent = tag.name;
+        tagRow.appendChild(chip);
+      }
+      li.appendChild(tagRow);
+    }
+
     if (n.id === editingNoteId) {
       const textarea = document.createElement('textarea');
       textarea.className = 'note-edit-textarea';
       textarea.rows = 4;
       textarea.value = n.content;
       li.appendChild(textarea);
+
+      const editTagIds = new Set(n.tagIds || []);
+      const editTagPickers = document.createElement('div');
+      editTagPickers.className = 'note-tag-pickers';
+      for (const category of TAG_CATEGORIES) {
+        const group = document.createElement('div');
+        group.className = 'note-tag-group';
+        const gLabel = document.createElement('span');
+        gLabel.className = 'note-tag-group-label';
+        gLabel.textContent = TAG_CATEGORY_META[category].label;
+        group.appendChild(gLabel);
+        const picker = document.createElement('div');
+        picker.className = 'tag-picker';
+        renderTagPicker(picker, category, editTagIds);
+        group.appendChild(picker);
+        editTagPickers.appendChild(group);
+      }
+      li.appendChild(editTagPickers);
 
       let editImage = n.image || null;
       const imageField = document.createElement('div');
@@ -915,6 +1025,7 @@ function renderNoteList(list, { showPath = false } = {}) {
         if (!trimmed) return;
         n.content = trimmed;
         n.image = editImage;
+        n.tagIds = Array.from(editTagIds);
         editingNoteId = null;
         persist();
       });
@@ -971,151 +1082,38 @@ function renderNoteList(list, { showPath = false } = {}) {
 }
 
 function renderNotes() {
-  renderBreadcrumb();
-
-  const searching = noteSearchQuery.trim() !== '';
-  els.unitGrid.classList.toggle('hidden', searching);
-  if (!searching) renderUnitGrid();
-
-  const hasUnits = noteUnits.length > 0;
-  const canAdd = hasUnits && selectedUnitId !== 'all';
-  els.addNoteForm.classList.toggle('hidden', !canAdd);
-  els.noteAddHint.classList.toggle('hidden', canAdd);
-  if (!canAdd) {
-    els.noteAddHint.textContent = hasUnits
-      ? '폴더를 선택하면 노트를 추가할 수 있어요.'
-      : '먼저 위에서 폴더를 추가해 주세요.';
-  }
-
-  const list = sortNotes(searching ? searchAllNotes() : notesInCurrentFolder());
-  renderNoteList(list, { showPath: searching });
+  renderTagFilterBar();
+  renderTagPicker(els.bookTagPicker, 'book', pendingNoteTagIds);
+  renderTagPicker(els.unitTagPicker, 'unit', pendingNoteTagIds);
+  const list = sortNotes(visibleNotes());
+  renderNoteList(list);
 }
 
-els.addUnitForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  addUnit(els.unitInput.value);
-  els.unitInput.value = '';
-});
-
-els.unitBreadcrumb.addEventListener('click', (e) => {
-  if (justDraggedUnit) return;
-  const btn = e.target.closest('[data-unit-id]');
-  if (!btn) return;
-  selectedUnitId = btn.dataset.unitId;
+els.tagFilterBar.addEventListener('click', (e) => {
+  const actionEl = e.target.closest('[data-action]');
+  const action = actionEl ? actionEl.dataset.action : null;
+  if (action === 'clear') {
+    activeFilterTagIds.clear();
+    renderNotes();
+    return;
+  }
+  if (action === 'manage') {
+    tagManageMode = !tagManageMode;
+    renderTagFilterBar();
+    return;
+  }
+  const chip = e.target.closest('.tag-chip');
+  if (!chip) return;
+  const tagId = chip.dataset.tagId;
+  if (tagManageMode) {
+    if (action === 'rename') renameTag(tagId);
+    else if (action === 'delete') deleteTag(tagId);
+    else if (action === 'swap') toggleTagCategory(tagId);
+    return;
+  }
+  if (activeFilterTagIds.has(tagId)) activeFilterTagIds.delete(tagId);
+  else activeFilterTagIds.add(tagId);
   renderNotes();
-});
-
-els.unitGrid.addEventListener('click', (e) => {
-  if (justDraggedUnit) return;
-  const editBtn = e.target.closest('.unit-card-edit');
-  if (editBtn) {
-    e.stopPropagation();
-    renameUnit(editBtn.closest('[data-unit-id]').dataset.unitId);
-    return;
-  }
-  const delBtn = e.target.closest('.unit-card-delete');
-  if (delBtn) {
-    e.stopPropagation();
-    deleteUnit(delBtn.closest('[data-unit-id]').dataset.unitId);
-    return;
-  }
-  const card = e.target.closest('[data-unit-id]');
-  if (!card) return;
-  selectedUnitId = card.dataset.unitId;
-  renderNotes();
-});
-
-// Drag a folder card onto another folder (or a breadcrumb item) to move it there.
-let unitDrag = null;
-let justDraggedUnit = false;
-
-function beginUnitDragging() {
-  if (!unitDrag) return;
-  unitDrag.dragging = true;
-  unitDrag.sourceCard.classList.add('dragging');
-}
-
-function updateUnitDragTarget(x, y) {
-  const el = document.elementFromPoint(x, y);
-  const target = el ? el.closest('[data-unit-id]') : null;
-  if (unitDrag.overEl && unitDrag.overEl !== target) {
-    unitDrag.overEl.classList.remove('drag-over');
-    unitDrag.overEl = null;
-  }
-  if (!target) return;
-  const targetId = target.dataset.unitId === 'all' ? null : target.dataset.unitId;
-  if (canMoveUnitTo(unitDrag.unitId, targetId)) {
-    target.classList.add('drag-over');
-    unitDrag.overEl = target;
-  }
-}
-
-function teardownUnitDrag() {
-  if (!unitDrag) return;
-  if (unitDrag.longPressTimer) clearTimeout(unitDrag.longPressTimer);
-  unitDrag.sourceCard.classList.remove('dragging');
-  if (unitDrag.overEl) unitDrag.overEl.classList.remove('drag-over');
-  window.removeEventListener('pointermove', onUnitPointerMove);
-  window.removeEventListener('pointerup', onUnitPointerUp);
-  window.removeEventListener('pointercancel', onUnitPointerCancel);
-  unitDrag = null;
-}
-
-function onUnitPointerMove(e) {
-  if (!unitDrag || e.pointerId !== unitDrag.pointerId) return;
-  const dist = Math.hypot(e.clientX - unitDrag.startX, e.clientY - unitDrag.startY);
-  if (!unitDrag.dragging) {
-    if (unitDrag.pointerType === 'mouse') {
-      if (dist > 6) beginUnitDragging();
-    } else if (dist > 10) {
-      teardownUnitDrag();
-    }
-    return;
-  }
-  e.preventDefault();
-  updateUnitDragTarget(e.clientX, e.clientY);
-}
-
-function onUnitPointerUp(e) {
-  if (!unitDrag || e.pointerId !== unitDrag.pointerId) return;
-  if (unitDrag.dragging) {
-    if (unitDrag.overEl) {
-      const targetId = unitDrag.overEl.dataset.unitId === 'all' ? null : unitDrag.overEl.dataset.unitId;
-      moveUnit(unitDrag.unitId, targetId);
-    }
-    justDraggedUnit = true;
-    setTimeout(() => { justDraggedUnit = false; }, 0);
-  }
-  teardownUnitDrag();
-}
-
-function onUnitPointerCancel(e) {
-  if (!unitDrag || e.pointerId !== unitDrag.pointerId) return;
-  teardownUnitDrag();
-}
-
-els.unitGrid.addEventListener('pointerdown', (e) => {
-  if (e.pointerType === 'mouse' && e.button !== 0) return;
-  if (e.target.closest('.unit-card-edit') || e.target.closest('.unit-card-delete')) return;
-  const card = e.target.closest('.unit-card');
-  if (!card) return;
-  unitDrag = {
-    unitId: card.dataset.unitId,
-    pointerId: e.pointerId,
-    pointerType: e.pointerType,
-    startX: e.clientX,
-    startY: e.clientY,
-    dragging: false,
-    sourceCard: card,
-    overEl: null,
-    longPressTimer: null,
-  };
-  window.addEventListener('pointermove', onUnitPointerMove);
-  window.addEventListener('pointerup', onUnitPointerUp);
-  window.addEventListener('pointercancel', onUnitPointerCancel);
-  if (e.pointerType === 'touch' || e.pointerType === 'pen') {
-    unitDrag.longPressTimer = setTimeout(beginUnitDragging, 450);
-  }
 });
 
 function clearPendingNoteImage() {
@@ -1141,14 +1139,14 @@ els.noteImageRemoveBtn.addEventListener('click', () => clearPendingNoteImage());
 
 els.addNoteForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  if (selectedUnitId === 'all') return;
   const title = els.noteTitleInput.value.trim();
   const content = els.noteContentInput.value.trim();
   if (!title || !content) return;
-  addNote(selectedUnitId, title, content, pendingNoteImage);
+  addNote(title, content, pendingNoteImage, Array.from(pendingNoteTagIds));
   els.noteTitleInput.value = '';
   els.noteContentInput.value = '';
   clearPendingNoteImage();
+  pendingNoteTagIds.clear();
   els.noteTitleInput.focus();
 });
 
@@ -1164,43 +1162,39 @@ els.noteSortSelect.addEventListener('change', () => {
 
 els.notesTabBtn.addEventListener('click', () => switchTab('notes'));
 
-function allUnitsFlat() {
-  const result = [];
-  function walk(parentId, depth) {
-    for (const u of childUnits(parentId)) {
-      result.push({ id: u.id, name: u.name, depth });
-      walk(u.id, depth + 1);
-    }
-  }
-  walk(null, 0);
-  return result;
-}
-
-function renderReviewUnitCheckboxes() {
-  els.reviewUnitCheckboxes.innerHTML = '';
-  const flat = allUnitsFlat();
-  if (flat.length === 0) {
+function renderReviewTagCheckboxes() {
+  els.reviewTagCheckboxes.innerHTML = '';
+  if ((noteTags || []).length === 0) {
     const p = document.createElement('p');
     p.className = 'empty-hint';
-    p.textContent = '폴더를 먼저 만들어 주세요.';
-    els.reviewUnitCheckboxes.appendChild(p);
+    p.textContent = '태그를 먼저 만들어 주세요.';
+    els.reviewTagCheckboxes.appendChild(p);
     return;
   }
-  for (const u of flat) {
-    const label = document.createElement('label');
-    label.className = 'review-unit-row';
-    label.style.paddingLeft = `${u.depth * 16}px`;
+  for (const category of TAG_CATEGORIES) {
+    const tags = tagsInCategory(category);
+    if (tags.length === 0) continue;
 
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.value = u.id;
-    label.appendChild(cb);
+    const heading = document.createElement('p');
+    heading.className = 'review-tag-heading';
+    heading.textContent = TAG_CATEGORY_META[category].label;
+    els.reviewTagCheckboxes.appendChild(heading);
 
-    const span = document.createElement('span');
-    span.textContent = `${u.name} (${countNotesInSubtree(u.id)}개)`;
-    label.appendChild(span);
+    for (const tag of tags) {
+      const label = document.createElement('label');
+      label.className = 'review-unit-row';
 
-    els.reviewUnitCheckboxes.appendChild(label);
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = tag.id;
+      label.appendChild(cb);
+
+      const span = document.createElement('span');
+      span.textContent = `${tag.name} (${countNotesWithTag(tag.id)}개)`;
+      label.appendChild(span);
+
+      els.reviewTagCheckboxes.appendChild(label);
+    }
   }
 }
 
@@ -1259,24 +1253,20 @@ els.reviewBtn.addEventListener('click', () => {
   els.reviewSetupPanel.classList.toggle('hidden');
   if (opening) {
     els.reviewSetupHint.textContent = '';
-    renderReviewUnitCheckboxes();
+    renderReviewTagCheckboxes();
   }
 });
 
 els.startReviewBtn.addEventListener('click', () => {
-  const selectedIds = Array.from(els.reviewUnitCheckboxes.querySelectorAll('input:checked')).map(cb => cb.value);
-  if (selectedIds.length === 0) {
-    els.reviewSetupHint.textContent = '폴더를 하나 이상 선택해 주세요.';
-    return;
-  }
-  const idSet = new Set();
-  for (const id of selectedIds) {
-    idSet.add(id);
-    for (const d of collectDescendantUnitIds(id)) idSet.add(d);
-  }
-  const pool = notes.filter(n => idSet.has(n.unitId));
+  const selectedIds = Array.from(els.reviewTagCheckboxes.querySelectorAll('input:checked')).map(cb => cb.value);
+  const idSet = new Set(selectedIds);
+  const pool = idSet.size === 0
+    ? notes.slice()
+    : notes.filter(n => (n.tagIds || []).some(tid => idSet.has(tid)));
   if (pool.length === 0) {
-    els.reviewSetupHint.textContent = '선택한 폴더에 노트가 없어요.';
+    els.reviewSetupHint.textContent = idSet.size === 0
+      ? '복습할 노트가 없어요.'
+      : '선택한 태그의 노트가 없어요.';
     return;
   }
   const count = Math.max(1, Math.min(pool.length, Math.floor(Number(els.reviewCountInput.value)) || 1));
@@ -1360,23 +1350,27 @@ async function connectRoom(code, { adopt = false } = {}) {
       history = snap.data().history || {};
       noteUnits = snap.data().noteUnits || [];
       notes = snap.data().notes || [];
+      noteTags = Array.isArray(snap.data().noteTags) ? snap.data().noteTags : null;
+      if (noteTags === null) migrateFoldersToTags();
       resetIfNeeded(tasks);
       render();
       renderCalendar();
       renderNotes();
       saveLocal();
     } else {
-      await fsMod.setDoc(docRef, { items: tasks, history, noteUnits, notes, updatedAt: Date.now() });
+      await fsMod.setDoc(docRef, { items: tasks, history, noteUnits, noteTags: noteTags || [], notes, updatedAt: Date.now() });
     }
   } else {
     const snap = await fsMod.getDoc(docRef);
     if (!snap.exists()) {
-      await fsMod.setDoc(docRef, { items: tasks, history, noteUnits, notes, updatedAt: Date.now() });
+      await fsMod.setDoc(docRef, { items: tasks, history, noteUnits, noteTags: noteTags || [], notes, updatedAt: Date.now() });
     } else {
       tasks = snap.data().items || [];
       history = snap.data().history || {};
       noteUnits = snap.data().noteUnits || [];
       notes = snap.data().notes || [];
+      noteTags = Array.isArray(snap.data().noteTags) ? snap.data().noteTags : null;
+      if (noteTags === null) migrateFoldersToTags();
       resetIfNeeded(tasks);
       render();
       renderCalendar();
@@ -1395,6 +1389,8 @@ async function connectRoom(code, { adopt = false } = {}) {
     history = snap.data().history || {};
     noteUnits = snap.data().noteUnits || [];
     notes = snap.data().notes || [];
+    noteTags = Array.isArray(snap.data().noteTags) ? snap.data().noteTags : null;
+    if (noteTags === null) migrateFoldersToTags();
     resetIfNeeded(tasks);
     render();
     renderCalendar();
