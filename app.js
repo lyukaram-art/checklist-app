@@ -868,7 +868,7 @@ function renderTagFilterBar() {
   manage.type = 'button';
   manage.className = 'tag-filter-manage' + (tagManageMode ? ' active' : '');
   manage.dataset.action = 'manage';
-  manage.textContent = tagManageMode ? '완료' : '태그 관리';
+  manage.textContent = tagManageMode ? '✓ 완료' : '⚙️ 태그 관리';
   controls.appendChild(manage);
 
   els.tagFilterBar.appendChild(controls);

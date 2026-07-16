@@ -1126,11 +1126,10 @@ body::before {
 .tag-filter-controls {
   display: flex;
   gap: 8px;
-  margin-top: 2px;
+  margin-top: 6px;
 }
 
-.tag-filter-clear,
-.tag-filter-manage {
+.tag-filter-clear {
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -1141,9 +1140,21 @@ body::before {
   cursor: pointer;
 }
 
-.tag-filter-manage.active {
-  background: var(--surface-highlight);
+.tag-filter-manage {
+  border: 1.5px solid var(--border);
+  background: var(--surface);
   color: var(--text-heading);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.tag-filter-manage.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .note-tag-pickers {
