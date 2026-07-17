@@ -597,23 +597,16 @@ function tagEffectiveIds(tag) {
   return tag.category === 'unit' ? unitSubtreeIds(tag.id) : [tag.id];
 }
 
-function unitHasActiveDescendant(id) {
-  return unitDescendantIds(id).some(d => activeFilterTagIds.has(d));
-}
-
-// A unit is shown expanded if the user opened it, or a descendant is filtered
-// (so an active filter is never hidden inside a collapsed parent).
-function isUnitExpanded(id) {
-  return expandedUnitIds.has(id) || unitHasActiveDescendant(id);
-}
-
-// Units to show in the collapsible filter tree (children hidden until expanded).
-function visibleUnitTree() {
+// Units to show in a collapsible tree (children hidden until the parent opens).
+// A parent auto-expands when it holds an item from activeSet — an active filter
+// selection or a note's chosen tag — so a selection is never hidden.
+function visibleUnitTree(activeSet, expandedSet) {
   const out = [];
   const walk = (parentId, depth) => {
     for (const t of unitChildren(parentId)) {
       const childCount = unitChildren(t.id).length;
-      const expanded = isUnitExpanded(t.id);
+      const autoOpen = unitDescendantIds(t.id).some(d => activeSet.has(d));
+      const expanded = expandedSet.has(t.id) || autoOpen;
       out.push({ tag: t, depth, hasChildren: childCount > 0, expanded });
       if (childCount && expanded) walk(t.id, depth + 1);
     }
@@ -924,7 +917,7 @@ function renderTagFilterChips() {
   for (const category of TAG_CATEGORIES) {
     // Units use a collapsible tree (children hidden until the parent is opened).
     const items = category === 'unit'
-      ? visibleUnitTree()
+      ? visibleUnitTree(activeFilterTagIds, expandedUnitIds)
       : orderedTagsInCategory(category).map(o => ({ ...o, hasChildren: false, expanded: false }));
     if (items.length === 0) continue;
 
@@ -1035,13 +1028,34 @@ function renderTagManageList() {
 
 function renderTagPicker(container, category, selectedSet) {
   container.innerHTML = '';
-  for (const { tag, depth } of orderedTagsInCategory(category)) {
+  const items = category === 'unit'
+    ? visibleUnitTree(selectedSet, expandedUnitIds)
+    : orderedTagsInCategory(category).map(o => ({ ...o, hasChildren: false, expanded: false }));
+  for (const { tag, depth, hasChildren, expanded } of items) {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'tag-chip tag-' + category + (selectedSet.has(tag.id) ? ' active' : '');
     chip.dataset.tagId = tag.id;
-    chip.textContent = tag.name;
     if (depth) chip.style.marginLeft = (depth * 14) + 'px';
+
+    if (hasChildren) {
+      const arrow = document.createElement('span');
+      arrow.className = 'tag-expand';
+      arrow.textContent = expanded ? '▾' : '▸';
+      arrow.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (expandedUnitIds.has(tag.id)) expandedUnitIds.delete(tag.id);
+        else expandedUnitIds.add(tag.id);
+        renderTagPicker(container, category, selectedSet);
+      });
+      chip.appendChild(arrow);
+    }
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'tag-chip-name';
+    nameSpan.textContent = tag.name;
+    chip.appendChild(nameSpan);
+
     chip.addEventListener('click', () => {
       if (selectedSet.has(tag.id)) selectedSet.delete(tag.id);
       else selectedSet.add(tag.id);
