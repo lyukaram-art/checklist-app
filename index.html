@@ -219,7 +219,12 @@
     </div>
 
     <div id="notesView" class="hidden">
-      <button id="reviewBtn" type="button" class="add-btn review-toggle-btn">🔀 복습하기</button>
+      <div class="notes-action-row">
+        <button id="reviewBtn" type="button" class="add-btn review-toggle-btn">🔀 복습하기</button>
+        <button id="analysisBtn" type="button" class="add-btn analysis-toggle-btn">📊 학습 분석</button>
+      </div>
+
+      <section id="analysisPanel" class="sync-panel hidden"></section>
 
       <section id="reviewSetupPanel" class="sync-panel hidden">
         <p class="review-setup-title">복습할 태그를 선택하세요 (안 고르면 전체)</p>

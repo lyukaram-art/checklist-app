@@ -1051,6 +1051,143 @@ body::before {
   color: var(--text-muted);
 }
 
+.notes-action-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.notes-action-row .add-btn {
+  flex: 1;
+  margin-bottom: 0;
+  padding: 12px 0;
+}
+
+.analysis-toggle-btn {
+  background: var(--success);
+}
+
+.analysis-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.analysis-tile {
+  background: var(--surface-alt);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 4px;
+  text-align: center;
+}
+
+.analysis-tile-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-heading);
+}
+
+.analysis-tile-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.analysis-rec {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--surface-highlight);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 12px;
+}
+
+.analysis-rec-text {
+  flex: 1;
+  min-width: 160px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.analysis-section {
+  margin-top: 16px;
+}
+
+.analysis-heading {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.analysis-empty,
+.analysis-sub {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.analysis-row,
+.analysis-note-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1.5px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin-bottom: 6px;
+}
+
+.analysis-row.clickable {
+  cursor: pointer;
+}
+
+.analysis-row-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.analysis-row-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-rate {
+  font-size: 13px;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+.analysis-bar-track {
+  height: 6px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.analysis-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.analysis-row-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
 .notes-section-title {
   margin: 18px 0 10px;
   padding-bottom: 6px;

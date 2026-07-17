@@ -65,6 +65,8 @@ const els = {
   noteAddHint: document.getElementById('noteAddHint'),
   notesList: document.getElementById('notesList'),
   reviewBtn: document.getElementById('reviewBtn'),
+  analysisBtn: document.getElementById('analysisBtn'),
+  analysisPanel: document.getElementById('analysisPanel'),
   reviewSetupPanel: document.getElementById('reviewSetupPanel'),
   reviewTagCheckboxes: document.getElementById('reviewTagCheckboxes'),
   reviewCountInput: document.getElementById('reviewCountInput'),
@@ -1470,8 +1472,255 @@ function gradeCurrentCard(remembered) {
   }
 }
 
+// ---- 학습 분석 대시보드 ----
+function isReviewedToday(n) {
+  return n.lastReviewedAt && startOfDay(n.lastReviewedAt) === startOfDay(Date.now());
+}
+
+function tagStats(tag) {
+  const ids = new Set(tagEffectiveIds(tag));
+  const ns = notes.filter(n => (n.tagIds || []).some(t => ids.has(t)));
+  const reviewCount = ns.reduce((s, n) => s + (n.reviewCount || 0), 0);
+  const remembered = ns.reduce((s, n) => s + (n.rememberedCount || 0), 0);
+  return { tag, noteCount: ns.length, reviewCount, rate: reviewCount ? remembered / reviewCount : null };
+}
+
+function rateColorFromValue(rate) {
+  return `hsl(${Math.round(rate * 210)}, 70%, 45%)`;
+}
+
+function rateBadge(rate) {
+  const span = document.createElement('span');
+  span.className = 'analysis-rate';
+  if (rate === null) {
+    span.textContent = '미복습';
+    span.style.color = 'var(--text-faint)';
+  } else {
+    span.textContent = Math.round(rate * 100) + '%';
+    span.style.color = rateColorFromValue(rate);
+  }
+  return span;
+}
+
+function analysisSection(title) {
+  const wrap = document.createElement('div');
+  wrap.className = 'analysis-section';
+  const h = document.createElement('p');
+  h.className = 'analysis-heading';
+  h.textContent = title;
+  wrap.appendChild(h);
+  return wrap;
+}
+
+function analysisBarRow(name, rate, meta, onClick) {
+  const row = document.createElement(onClick ? 'button' : 'div');
+  row.className = 'analysis-row' + (onClick ? ' clickable' : '');
+  if (onClick) {
+    row.type = 'button';
+    row.addEventListener('click', onClick);
+  }
+  const top = document.createElement('div');
+  top.className = 'analysis-row-top';
+  const nm = document.createElement('span');
+  nm.className = 'analysis-row-name';
+  nm.textContent = name;
+  top.appendChild(nm);
+  top.appendChild(rateBadge(rate));
+  row.appendChild(top);
+
+  const track = document.createElement('div');
+  track.className = 'analysis-bar-track';
+  const fill = document.createElement('div');
+  fill.className = 'analysis-bar-fill';
+  fill.style.width = (rate === null ? 0 : Math.round(rate * 100)) + '%';
+  if (rate !== null) fill.style.background = rateColorFromValue(rate);
+  track.appendChild(fill);
+  row.appendChild(track);
+
+  if (meta) {
+    const m = document.createElement('div');
+    m.className = 'analysis-row-meta';
+    m.textContent = meta;
+    row.appendChild(m);
+  }
+  return row;
+}
+
+function analysisNoteRow(n, rate, extraMeta) {
+  const row = document.createElement('div');
+  row.className = 'analysis-note-row';
+  const top = document.createElement('div');
+  top.className = 'analysis-row-top';
+  const nm = document.createElement('span');
+  nm.className = 'analysis-row-name';
+  nm.textContent = n.title;
+  top.appendChild(nm);
+  top.appendChild(rateBadge(rate));
+  row.appendChild(top);
+
+  const parts = [];
+  const tags = noteTagObjects(n).map(t => t.name);
+  if (tags.length) parts.push(tags.join(' · '));
+  if (extraMeta) parts.push(extraMeta);
+  if (parts.length) {
+    const sub = document.createElement('div');
+    sub.className = 'analysis-row-meta';
+    sub.textContent = parts.join('  ·  ');
+    row.appendChild(sub);
+  }
+  return row;
+}
+
+function renderAnalysis() {
+  const panel = els.analysisPanel;
+  panel.innerHTML = '';
+
+  if (notes.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'empty-hint';
+    p.textContent = '아직 오답노트가 없어요. 노트를 추가하면 분석이 표시돼요.';
+    panel.appendChild(p);
+    return;
+  }
+
+  const totalReviews = notes.reduce((s, n) => s + (n.reviewCount || 0), 0);
+  const totalRemembered = notes.reduce((s, n) => s + (n.rememberedCount || 0), 0);
+  const reviewedNotes = notes.filter(n => (n.reviewCount || 0) > 0).length;
+  const neverReviewed = notes.length - reviewedNotes;
+  const todayCount = notes.filter(isReviewedToday).length;
+  const overallRate = totalReviews ? totalRemembered / totalReviews : null;
+
+  // 요약 타일
+  const tiles = document.createElement('div');
+  tiles.className = 'analysis-tiles';
+  const tile = (label, value, color) => {
+    const t = document.createElement('div');
+    t.className = 'analysis-tile';
+    const v = document.createElement('div');
+    v.className = 'analysis-tile-value';
+    v.textContent = value;
+    if (color) v.style.color = color;
+    const l = document.createElement('div');
+    l.className = 'analysis-tile-label';
+    l.textContent = label;
+    t.appendChild(v);
+    t.appendChild(l);
+    return t;
+  };
+  tiles.appendChild(tile('총 노트', String(notes.length)));
+  tiles.appendChild(tile('전체 기억률', overallRate === null ? '-' : Math.round(overallRate * 100) + '%',
+    overallRate === null ? null : rateColorFromValue(overallRate)));
+  tiles.appendChild(tile('미복습', String(neverReviewed)));
+  tiles.appendChild(tile('오늘 복습', String(todayCount)));
+  panel.appendChild(tiles);
+
+  const unitStats = tagsInCategory('unit').map(tagStats)
+    .filter(s => s.reviewCount > 0)
+    .sort((a, b) => a.rate - b.rate);
+
+  // 추천 + 바로 복습
+  const rec = document.createElement('div');
+  rec.className = 'analysis-rec';
+  const recText = document.createElement('p');
+  recText.className = 'analysis-rec-text';
+  if (unitStats.length) {
+    const w = unitStats[0];
+    recText.textContent = `가장 취약한 단원은 "${w.tag.name}" (기억률 ${Math.round(w.rate * 100)}%)예요. 여기부터 복습해요.`;
+  } else if (neverReviewed > 0) {
+    recText.textContent = '아직 복습 데이터가 적어요. 복습을 시작하면 취약점 분석이 정확해져요.';
+  } else {
+    recText.textContent = '잘하고 있어요! 오래된 노트 위주로 복습해요.';
+  }
+  rec.appendChild(recText);
+  const recBtn = document.createElement('button');
+  recBtn.type = 'button';
+  recBtn.className = 'small-btn';
+  recBtn.textContent = '🎯 지금 복습 시작';
+  recBtn.addEventListener('click', () => {
+    let pool;
+    if (unitStats.length) {
+      const ids = new Set(tagEffectiveIds(unitStats[0].tag));
+      pool = notes.filter(n => (n.tagIds || []).some(t => ids.has(t)));
+    } else {
+      pool = notes.slice();
+    }
+    if (pool.length === 0) pool = notes.slice();
+    beginReview(pool, Math.min(pool.length, 10));
+  });
+  rec.appendChild(recBtn);
+  panel.appendChild(rec);
+
+  // 취약 단원
+  const weakSec = analysisSection('🎯 취약 단원');
+  if (unitStats.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'analysis-empty';
+    p.textContent = '복습 기록이 쌓이면 여기 표시돼요.';
+    weakSec.appendChild(p);
+  } else {
+    for (const s of unitStats.slice(0, 5)) {
+      weakSec.appendChild(analysisBarRow(s.tag.name, s.rate, `${s.noteCount}개 · ${s.reviewCount}회 복습`, () => {
+        activeFilterTagIds.clear();
+        activeFilterTagIds.add(s.tag.id);
+        els.analysisPanel.classList.add('hidden');
+        renderNotes();
+        els.tagFilterBar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }));
+    }
+  }
+  panel.appendChild(weakSec);
+
+  // 자주 틀리는 개념
+  const forgotten = notes.filter(n => (n.reviewCount || 0) >= 2)
+    .map(n => ({ n, rate: n.rememberedCount / n.reviewCount }))
+    .sort((a, b) => a.rate - b.rate || b.n.reviewCount - a.n.reviewCount)
+    .slice(0, 5);
+  const forgSec = analysisSection('🔁 자주 틀리는 개념');
+  if (forgotten.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'analysis-empty';
+    p.textContent = '2번 이상 복습한 노트가 쌓이면 표시돼요.';
+    forgSec.appendChild(p);
+  } else {
+    for (const f of forgotten) forgSec.appendChild(analysisNoteRow(f.n, f.rate));
+  }
+  panel.appendChild(forgSec);
+
+  // 복습이 필요한 노트
+  const stale = notes.filter(n => !isReviewedToday(n))
+    .slice()
+    .sort((a, b) => reviewPriority(b) - reviewPriority(a))
+    .slice(0, 5);
+  const staleSec = analysisSection('⏰ 복습이 필요한 노트');
+  if (neverReviewed > 0) {
+    const info = document.createElement('p');
+    info.className = 'analysis-sub';
+    info.textContent = `한 번도 복습 안 한 노트 ${neverReviewed}개`;
+    staleSec.appendChild(info);
+  }
+  for (const n of stale) {
+    staleSec.appendChild(analysisNoteRow(
+      n,
+      n.reviewCount ? n.rememberedCount / n.reviewCount : null,
+      formatLastReviewed(n.lastReviewedAt)
+    ));
+  }
+  panel.appendChild(staleSec);
+}
+
+function beginReview(pool, count) {
+  reviewQueue = weightedSample(pool, count);
+  reviewSessionGrades = [];
+  reviewIndex = 0;
+  els.analysisPanel.classList.add('hidden');
+  els.reviewSetupPanel.classList.add('hidden');
+  els.reviewPlayPanel.classList.remove('hidden');
+  showReviewCard();
+}
+
 els.reviewBtn.addEventListener('click', () => {
   els.reviewPlayPanel.classList.add('hidden');
+  els.analysisPanel.classList.add('hidden');
   const opening = els.reviewSetupPanel.classList.contains('hidden');
   els.reviewSetupPanel.classList.toggle('hidden');
   if (opening) {
@@ -1498,12 +1747,15 @@ els.startReviewBtn.addEventListener('click', () => {
     return;
   }
   const count = Math.max(1, Math.min(pool.length, Math.floor(Number(els.reviewCountInput.value)) || 1));
-  reviewQueue = weightedSample(pool, count);
-  reviewSessionGrades = [];
-  reviewIndex = 0;
+  beginReview(pool, count);
+});
+
+els.analysisBtn.addEventListener('click', () => {
+  els.reviewPlayPanel.classList.add('hidden');
   els.reviewSetupPanel.classList.add('hidden');
-  els.reviewPlayPanel.classList.remove('hidden');
-  showReviewCard();
+  const opening = els.analysisPanel.classList.contains('hidden');
+  els.analysisPanel.classList.toggle('hidden');
+  if (opening) renderAnalysis();
 });
 
 els.revealBtn.addEventListener('click', () => {
