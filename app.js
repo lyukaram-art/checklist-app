@@ -113,6 +113,7 @@ let editingNoteId = null;
 let pendingNoteImage = null;
 const activeFilterTagIds = new Set();
 const pendingNoteTagIds = new Set();
+const expandedUnitIds = new Set();
 let tagManageMode = false;
 let reviewQueue = [];
 let reviewIndex = 0;
@@ -596,6 +597,31 @@ function tagEffectiveIds(tag) {
   return tag.category === 'unit' ? unitSubtreeIds(tag.id) : [tag.id];
 }
 
+function unitHasActiveDescendant(id) {
+  return unitDescendantIds(id).some(d => activeFilterTagIds.has(d));
+}
+
+// A unit is shown expanded if the user opened it, or a descendant is filtered
+// (so an active filter is never hidden inside a collapsed parent).
+function isUnitExpanded(id) {
+  return expandedUnitIds.has(id) || unitHasActiveDescendant(id);
+}
+
+// Units to show in the collapsible filter tree (children hidden until expanded).
+function visibleUnitTree() {
+  const out = [];
+  const walk = (parentId, depth) => {
+    for (const t of unitChildren(parentId)) {
+      const childCount = unitChildren(t.id).length;
+      const expanded = isUnitExpanded(t.id);
+      out.push({ tag: t, depth, hasChildren: childCount > 0, expanded });
+      if (childCount && expanded) walk(t.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
 function noteTagObjects(n) {
   return (n.tagIds || [])
     .map(findTag)
@@ -896,8 +922,11 @@ function renderTagFilterBar() {
 
 function renderTagFilterChips() {
   for (const category of TAG_CATEGORIES) {
-    const ordered = orderedTagsInCategory(category);
-    if (ordered.length === 0) continue;
+    // Units use a collapsible tree (children hidden until the parent is opened).
+    const items = category === 'unit'
+      ? visibleUnitTree()
+      : orderedTagsInCategory(category).map(o => ({ ...o, hasChildren: false, expanded: false }));
+    if (items.length === 0) continue;
 
     const row = document.createElement('div');
     row.className = 'tag-filter-row';
@@ -907,12 +936,20 @@ function renderTagFilterChips() {
     label.textContent = TAG_CATEGORY_META[category].label;
     row.appendChild(label);
 
-    for (const { tag, depth } of ordered) {
+    for (const { tag, depth, hasChildren, expanded } of items) {
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'tag-chip tag-' + category + (activeFilterTagIds.has(tag.id) ? ' active' : '');
       chip.dataset.tagId = tag.id;
       if (depth) chip.style.marginLeft = (depth * 14) + 'px';
+
+      if (hasChildren) {
+        const arrow = document.createElement('span');
+        arrow.className = 'tag-expand';
+        arrow.dataset.action = 'expand';
+        arrow.textContent = expanded ? '▾' : '▸';
+        chip.appendChild(arrow);
+      }
 
       const name = document.createElement('span');
       name.className = 'tag-chip-name';
@@ -1264,6 +1301,13 @@ els.tagFilterBar.addEventListener('click', (e) => {
     if (action === 'rename') renameTag(tagId);
     else if (action === 'delete') deleteTag(tagId);
     else toggleTagCategory(tagId);
+    return;
+  }
+  if (action === 'expand') {
+    const id = actionEl.closest('.tag-chip').dataset.tagId;
+    if (expandedUnitIds.has(id)) expandedUnitIds.delete(id);
+    else expandedUnitIds.add(id);
+    renderTagFilterBar();
     return;
   }
   const chip = e.target.closest('.tag-chip');

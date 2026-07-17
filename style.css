@@ -1097,6 +1097,16 @@ body::before {
   line-height: 1.2;
 }
 
+.tag-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: -5px 0 -5px -6px;
+  padding: 5px 5px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
 .tag-chip.tag-book {
   border-color: var(--accent-blue-soft);
   color: var(--accent-blue);
