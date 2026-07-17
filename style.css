@@ -1219,6 +1219,32 @@ body::before {
   margin-right: 2px;
 }
 
+.tag-tree-label {
+  margin: 4px 0 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.tag-tree,
+.tag-tree-node,
+.tag-tree-children {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.tag-tree {
+  width: 100%;
+}
+
+.tag-tree-children {
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border-game);
+}
+
 .tag-chip {
   display: inline-flex;
   align-items: center;

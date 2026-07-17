@@ -599,22 +599,60 @@ function tagEffectiveIds(tag) {
   return tag.category === 'unit' ? unitSubtreeIds(tag.id) : [tag.id];
 }
 
-// Units to show in a collapsible tree (children hidden until the parent opens).
-// A parent auto-expands when it holds an item from activeSet — an active filter
-// selection or a note's chosen tag — so a selection is never hidden.
-function visibleUnitTree(activeSet, expandedSet) {
-  const out = [];
-  const walk = (parentId, depth) => {
+// A unit shows expanded when the user opened it, or a descendant is in activeSet
+// (a filter selection or a note's chosen tag) so a selection is never hidden.
+function unitIsExpanded(id, activeSet, expandedSet) {
+  return expandedSet.has(id) || unitDescendantIds(id).some(d => activeSet.has(d));
+}
+
+// Build a nested, indented unit tree. Each parent's children sit in an
+// indented block with a left connector line, so grouping is unambiguous even
+// with several parents expanded. When onArrow/onChip are omitted, chips carry
+// data attributes for the filter bar's event delegation instead.
+function buildUnitTree(activeSet, expandedSet, { isSelected, label, onChip, onArrow }) {
+  const tree = document.createElement('div');
+  tree.className = 'tag-tree';
+  const walk = (parentId, container) => {
     for (const t of unitChildren(parentId)) {
       const childCount = unitChildren(t.id).length;
-      const autoOpen = unitDescendantIds(t.id).some(d => activeSet.has(d));
-      const expanded = expandedSet.has(t.id) || autoOpen;
-      out.push({ tag: t, depth, hasChildren: childCount > 0, expanded });
-      if (childCount && expanded) walk(t.id, depth + 1);
+      const expanded = unitIsExpanded(t.id, activeSet, expandedSet);
+
+      const node = document.createElement('div');
+      node.className = 'tag-tree-node';
+
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'tag-chip tag-unit' + (isSelected(t.id) ? ' active' : '');
+      chip.dataset.tagId = t.id;
+
+      if (childCount) {
+        const arrow = document.createElement('span');
+        arrow.className = 'tag-expand';
+        arrow.textContent = expanded ? '▾' : '▸';
+        if (onArrow) arrow.addEventListener('click', (e) => { e.stopPropagation(); onArrow(t.id); });
+        else arrow.dataset.action = 'expand';
+        chip.appendChild(arrow);
+      }
+
+      const nm = document.createElement('span');
+      nm.className = 'tag-chip-name';
+      nm.textContent = label(t);
+      chip.appendChild(nm);
+
+      if (onChip) chip.addEventListener('click', () => onChip(t.id));
+      node.appendChild(chip);
+
+      if (childCount && expanded) {
+        const kids = document.createElement('div');
+        kids.className = 'tag-tree-children';
+        walk(t.id, kids);
+        node.appendChild(kids);
+      }
+      container.appendChild(node);
     }
   };
-  walk(null, 0);
-  return out;
+  walk(null, tree);
+  return tree;
 }
 
 function noteTagObjects(n) {
@@ -916,45 +954,39 @@ function renderTagFilterBar() {
 }
 
 function renderTagFilterChips() {
-  for (const category of TAG_CATEGORIES) {
-    // Units use a collapsible tree (children hidden until the parent is opened).
-    const items = category === 'unit'
-      ? visibleUnitTree(activeFilterTagIds, expandedUnitIds)
-      : orderedTagsInCategory(category).map(o => ({ ...o, hasChildren: false, expanded: false }));
-    if (items.length === 0) continue;
-
+  // Books: flat chips in one row.
+  const books = tagsInCategory('book');
+  if (books.length) {
     const row = document.createElement('div');
     row.className = 'tag-filter-row';
-
     const label = document.createElement('span');
     label.className = 'tag-filter-label';
-    label.textContent = TAG_CATEGORY_META[category].label;
+    label.textContent = TAG_CATEGORY_META.book.label;
     row.appendChild(label);
-
-    for (const { tag, depth, hasChildren, expanded } of items) {
+    for (const tag of books) {
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'tag-chip tag-' + category + (activeFilterTagIds.has(tag.id) ? ' active' : '');
+      chip.className = 'tag-chip tag-book' + (activeFilterTagIds.has(tag.id) ? ' active' : '');
       chip.dataset.tagId = tag.id;
-      if (depth) chip.style.marginLeft = (depth * 14) + 'px';
-
-      if (hasChildren) {
-        const arrow = document.createElement('span');
-        arrow.className = 'tag-expand';
-        arrow.dataset.action = 'expand';
-        arrow.textContent = expanded ? '▾' : '▸';
-        chip.appendChild(arrow);
-      }
-
       const name = document.createElement('span');
       name.className = 'tag-chip-name';
       name.textContent = `${tag.name} (${countNotesWithTag(tag.id)})`;
       chip.appendChild(name);
-
       row.appendChild(chip);
     }
-
     els.tagFilterBar.appendChild(row);
+  }
+
+  // Units: an indented, collapsible tree (chips handled by event delegation).
+  if (tagsInCategory('unit').length) {
+    const label = document.createElement('p');
+    label.className = 'tag-tree-label';
+    label.textContent = TAG_CATEGORY_META.unit.label;
+    els.tagFilterBar.appendChild(label);
+    els.tagFilterBar.appendChild(buildUnitTree(activeFilterTagIds, expandedUnitIds, {
+      isSelected: id => activeFilterTagIds.has(id),
+      label: t => `${t.name} (${countNotesWithTag(t.id)})`,
+    }));
   }
 }
 
@@ -1028,44 +1060,7 @@ function renderTagManageList() {
   }
 }
 
-function renderTagPicker(container, category, selectedSet) {
-  container.innerHTML = '';
-  const items = category === 'unit'
-    ? visibleUnitTree(selectedSet, expandedUnitIds)
-    : orderedTagsInCategory(category).map(o => ({ ...o, hasChildren: false, expanded: false }));
-  for (const { tag, depth, hasChildren, expanded } of items) {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'tag-chip tag-' + category + (selectedSet.has(tag.id) ? ' active' : '');
-    chip.dataset.tagId = tag.id;
-    if (depth) chip.style.marginLeft = (depth * 14) + 'px';
-
-    if (hasChildren) {
-      const arrow = document.createElement('span');
-      arrow.className = 'tag-expand';
-      arrow.textContent = expanded ? '▾' : '▸';
-      arrow.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (expandedUnitIds.has(tag.id)) expandedUnitIds.delete(tag.id);
-        else expandedUnitIds.add(tag.id);
-        renderTagPicker(container, category, selectedSet);
-      });
-      chip.appendChild(arrow);
-    }
-
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'tag-chip-name';
-    nameSpan.textContent = tag.name;
-    chip.appendChild(nameSpan);
-
-    chip.addEventListener('click', () => {
-      if (selectedSet.has(tag.id)) selectedSet.delete(tag.id);
-      else selectedSet.add(tag.id);
-      renderTagPicker(container, category, selectedSet);
-    });
-    container.appendChild(chip);
-  }
-
+function makeAddChip(container, category, selectedSet) {
   const addChip = document.createElement('button');
   addChip.type = 'button';
   addChip.className = 'tag-chip tag-add';
@@ -1079,7 +1074,49 @@ function renderTagPicker(container, category, selectedSet) {
       renderTagPicker(container, category, selectedSet);
     }
   });
-  container.appendChild(addChip);
+  return addChip;
+}
+
+function renderTagPicker(container, category, selectedSet) {
+  container.innerHTML = '';
+
+  if (category === 'unit') {
+    const tree = buildUnitTree(selectedSet, expandedUnitIds, {
+      isSelected: id => selectedSet.has(id),
+      label: t => t.name,
+      onChip: (id) => {
+        if (selectedSet.has(id)) selectedSet.delete(id);
+        else selectedSet.add(id);
+        renderTagPicker(container, category, selectedSet);
+      },
+      onArrow: (id) => {
+        if (expandedUnitIds.has(id)) expandedUnitIds.delete(id);
+        else expandedUnitIds.add(id);
+        renderTagPicker(container, category, selectedSet);
+      },
+    });
+    const addNode = document.createElement('div');
+    addNode.className = 'tag-tree-node';
+    addNode.appendChild(makeAddChip(container, category, selectedSet));
+    tree.appendChild(addNode);
+    container.appendChild(tree);
+    return;
+  }
+
+  for (const { tag } of orderedTagsInCategory(category)) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'tag-chip tag-' + category + (selectedSet.has(tag.id) ? ' active' : '');
+    chip.dataset.tagId = tag.id;
+    chip.textContent = tag.name;
+    chip.addEventListener('click', () => {
+      if (selectedSet.has(tag.id)) selectedSet.delete(tag.id);
+      else selectedSet.add(tag.id);
+      renderTagPicker(container, category, selectedSet);
+    });
+    container.appendChild(chip);
+  }
+  container.appendChild(makeAddChip(container, category, selectedSet));
 }
 
 function renderNoteList(list) {
