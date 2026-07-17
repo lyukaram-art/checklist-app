@@ -1051,6 +1051,15 @@ body::before {
   color: var(--text-muted);
 }
 
+.notes-section-title {
+  margin: 18px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--border);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
 /* ---- Tags ---- */
 .tag-filter-bar {
   display: flex;
