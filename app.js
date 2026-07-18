@@ -1332,8 +1332,25 @@ function renderNotes() {
   renderTagFilterBar();
   renderTagPicker(els.bookTagPicker, 'book', pendingNoteTagIds);
   renderTagPicker(els.unitTagPicker, 'unit', pendingNoteTagIds);
+  // 기본값: 태그 선택도 검색어도 없으면 목록을 숨기고 안내만 표시.
+  const hasFilter = activeFilterTagIds.size > 0 || noteSearchQuery.trim().length > 0;
+  if (!hasFilter) {
+    renderNotesPrompt();
+    return;
+  }
   const list = sortNotes(visibleNotes());
   renderNoteList(list);
+}
+
+function renderNotesPrompt() {
+  els.notesList.innerHTML = '';
+  const li = document.createElement('li');
+  li.className = 'empty-hint';
+  const total = (notes || []).length;
+  li.textContent = total === 0
+    ? '아직 오답노트가 없어요. 아래에서 등록해 보세요.'
+    : `🔍 위에서 책이나 단원 태그를 선택하면 오답노트가 표시됩니다. (총 ${total}개)`;
+  els.notesList.appendChild(li);
 }
 
 els.tagFilterBar.addEventListener('click', (e) => {
